@@ -35,17 +35,47 @@
 
 (t/use-fixtures :each with-echo-server)
 
+(t/deftest disallow-connect
+  (let [st (atom {})]
+    (t/is (= {:res "disallow-connect"}
+             (bp/proxy! {:state          st
+                         :allow-connect? #{}
+                         :now-ms         0
+                         :session        "1"}
+                        {:op      "connect"
+                         :payload (str "localhost:" *echo-port*)})))))
+
 (t/deftest expire-connections
-  (let [st (atom {})
-        res (bp/proxy! {:state          st
-                        :allow-connect? #{["localhost" *echo-port*]}
-                        :now-ms         0
-                        :session-id     "1"}
-                       {:op      "connect"
-                        :payload (str "localhost:" *echo-port*)})]
-    (println "res:" res)
+  (let [st (atom {})]
+    (t/is (= {:res "ok-connect"
+              :session "1"}
+             (bp/proxy! {:state          st
+                         :allow-connect? #{["localhost" *echo-port*]}
+                         :now-ms         0
+                         :session        "1"}
+                        {:op      "connect"
+                         :payload (str "localhost:" *echo-port*)})))
     (t/is (map? (get @st "1")))
     (bp/expire-connections! st 50001)
     (t/is (map? (get @st "1")))
     (bp/expire-connections! st 60000)
+    (t/is (= ::none (get @st "1" ::none)))))
+
+(t/deftest close-connection
+  (let [st (atom {})]
+    (t/is (= {:res "ok-connect"
+              :session "1"}
+             (bp/proxy! {:state          st
+                         :allow-connect? #{["localhost" *echo-port*]}
+                         :now-ms         0
+                         :session        "1"}
+                        {:op      "connect"
+                         :payload (str "localhost:" *echo-port*)})))
+    (t/is (map? (get @st "1")))
+    (t/is (= {:res "ok-close"} (bp/proxy! {:state st}
+                                          {:op      "close"
+                                           :session "1"})))
+    (t/is (= {:res "unknown-session"} (bp/proxy! {:state st}
+                                                 {:op      "close"
+                                                  :session "1"})))
     (t/is (= ::none (get @st "1" ::none)))))

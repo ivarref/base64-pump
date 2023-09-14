@@ -15,27 +15,29 @@
   (let [[host port] (str/split s #":")]
     [host (Integer/valueOf port 10)]))
 
-(defn handle-connect [{:keys [state allow-connect? connect-timeout session-id now-ms]
-                       :or   {allow-connect?  nil
-                              connect-timeout 3000
+(defn handle-connect [{:keys [state allow-connect? connect-timeout session now-ms]
+                       :or   {connect-timeout 3000
                               now-ms          (System/currentTimeMillis)
-                              session-id      (str (random-uuid))}}
+                              session         (str (random-uuid))}}
                       {:keys [payload]}]
+  (assert (some? allow-connect?) "Expected :allow-connect? to be present")
+  (assert (string? payload) "Expected :payload to be a string")
   (let [[host port :as host-and-port] (parse-host-and-port payload)]
-    (when (allow-connect? host-and-port)
+    (if (allow-connect? host-and-port)
       (let [sock (Socket.)]
         (.setSoTimeout sock 200)
         (.connect sock (InetSocketAddress. ^String host ^Integer port) ^Integer connect-timeout)
         (let [in (BufferedInputStream. (.getInputStream sock))
               out (BufferedOutputStream. (.getOutputStream sock))]
           (swap! state (fn [old-state]
-                         (assoc old-state session-id
+                         (assoc old-state session
                                           {:socket      sock
                                            :in          in
                                            :out         out
-                                           :last-access now-ms}))))
-                                           ;:open?       true}))))
-        (println "yay!")))))
+                                           :last-access now-ms})))
+          {:res     "ok-connect"
+           :session session}))
+      {:res "disallow-connect"})))
 
 (defn close-silently! [^Closeable c]
   (when (and c (instance? Closeable c))
@@ -70,15 +72,26 @@
                    :now-ms         123 #_#{["localhost" 22]}}
                   {:payload "example.com:443"}))
 
+(defn handle-close
+  [{:keys [state]} {:keys [session]}]
+  (assert (string? session) "Expected :session to be a string")
+  (if-let [sess (get @state session)]
+    (do (close-silently! (get sess :in))
+        (close-silently! (get sess :out))
+        (close-silently! (get sess :socket))
+        (swap! state dissoc session)
+        {:res "ok-close"})
+    {:res "unknown-session"}))
+
 (defn proxy-impl
-  [{:keys [state allow-connect?] :as cfg} {:keys [op session payload] :as data}]
+  [{:keys [state] :as cfg} {:keys [op] :as data}]
   (assert (some? state))
   (assert (string? op) "Expected :op to be a string")
-  (assert (some? allow-connect?) "Expected :allow-connect? to be present")
-  ;(assert (string? session) "Expected :session to be a string")
-  (assert (string? payload) "Expected :payload to be a string")
   (cond (= "connect" op)
         (handle-connect cfg data)
+
+        (= "close" op)
+        (handle-close cfg data)
 
         :else
         (throw (IllegalStateException. (str "Unexpected op: " (pr-str op))))))
