@@ -1,7 +1,8 @@
 (ns com.github.ivarref.base64-pump
-  (:require [clojure.string :as str])
-  (:import (java.io BufferedInputStream BufferedOutputStream Closeable)
-           (java.net InetSocketAddress Socket)
+  (:require [clojure.java.io :as io]
+            [clojure.string :as str])
+  (:import (java.io BufferedInputStream BufferedOutputStream ByteArrayInputStream ByteArrayOutputStream Closeable InputStream)
+           (java.net InetSocketAddress Socket SocketTimeoutException)
            (java.util Base64)))
 
 ; connect
@@ -10,6 +11,9 @@
 
 (defn bytes->base64-str [bytes]
   (.encodeToString (Base64/getEncoder) bytes))
+
+(defn base64-str->bytes [^String base64-str]
+  (.decode (Base64/getDecoder) base64-str))
 
 (defn parse-host-and-port [s]
   (let [[host port] (str/split s #":")]
@@ -83,6 +87,52 @@
         {:res "ok-close"})
     {:res "unknown-session"}))
 
+(defn read-max-bytes [^InputStream in max-bytes]
+  (let [out (ByteArrayOutputStream.)]
+    (loop [c 0]
+      (when-let [r (try
+                     (.read in)
+                     (catch SocketTimeoutException ste
+                       nil))]
+        (when (not= r -1)
+          (.write out r)
+          (when (not= max-bytes c)
+            (recur (inc c))))))
+    (.toByteArray out)))
+
+(comment
+  (String. (read-max-bytes
+             (ByteArrayInputStream. (.getBytes "Hello World"))
+             1024)))
+
+(defn handle-recv [{:keys [state]} {:keys [session]}]
+  (assert (string? session) "Expected :session to be a string")
+  (if-let [sess (get @state session)]
+    (let [{:keys [^InputStream in ^Socket socket]} sess]
+      (if (not (.isClosed socket))
+        {:res     "ok-recv"
+         :payload (bytes->base64-str (read-max-bytes in 1024))}
+        {:res "socket-closed"})
+      #_{:res "ok-close"})
+    {:res "unknown-session"}))
+
+(defn handle-send
+  [{:keys [state now-ms]} {:keys [session payload]}]
+  (assert (string? session) "Expected :session to be a string")
+  (assert (string? payload) "Expected :payload to be a string")
+  (if-let [sess (get @state session)]
+    (let [{:keys [^BufferedOutputStream out ^Socket socket]} sess]
+      (if (not (.isClosed socket))
+        (let [bytes-to-send (base64-str->bytes payload)]
+          (with-open [bais (ByteArrayInputStream. bytes-to-send)]
+            (io/copy bais out))
+          (.flush out)
+          (swap! state assoc-in [session :last-access] now-ms)
+          {:res "ok-send"})
+        {:res "socket-closed"})
+      #_{:res "ok-close"})
+    {:res "unknown-session"}))
+
 (defn proxy-impl
   [{:keys [state] :as cfg} {:keys [op] :as data}]
   (assert (some? state))
@@ -92,6 +142,12 @@
 
         (= "close" op)
         (handle-close cfg data)
+
+        (= "send" op)
+        (handle-send cfg data)
+
+        (= "recv" op)
+        (handle-recv cfg data)
 
         :else
         (throw (IllegalStateException. (str "Unexpected op: " (pr-str op))))))
@@ -105,5 +161,3 @@
     (assoc cfg :state (or state default-state)
                :now-ms (or now-ms (System/currentTimeMillis)))
     data))
-
-

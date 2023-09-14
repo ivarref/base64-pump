@@ -1,16 +1,31 @@
 (ns com.github.ivarref.base64-pump-test
   (:require
-    [clojure.test :as t]
     [clj-commons.pretty.repl]
+    [clojure.test :as t]
     [com.github.ivarref.base64-pump :as bp])
-  (:import (java.net ServerSocket)))
+  (:import (java.io BufferedInputStream BufferedOutputStream)
+           (java.net ServerSocket Socket SocketTimeoutException)
+           (java.nio.charset StandardCharsets)))
 
 (clj-commons.pretty.repl/install-pretty-exceptions)
 
 (def ^:dynamic *echo-port* nil)
 
-(defn handle [sock]
-  (println "dum di dam..."))
+(defn echo-handler [^Socket sock]
+  (try
+    (with-open [in (BufferedInputStream. (.getInputStream sock))
+                out (BufferedOutputStream. (.getOutputStream sock))]
+      (loop [c 0]
+        (when-let [r (try
+                       (.read in)
+                       (catch SocketTimeoutException ste
+                         nil))]
+          (when (not= r -1)
+            (.write out r)
+            (.flush out)
+            (recur (inc c))))))
+    (catch Throwable t
+      (println "error in handle:" (ex-message t)))))
 
 (defn accept-inner [^ServerSocket ss]
   (try
@@ -21,7 +36,7 @@
 (defn accept [^ServerSocket ss]
   (loop []
     (when-let [sock (accept-inner ss)]
-      (future (handle sock))
+      (future (echo-handler sock))
       (recur))))
 
 (defn with-echo-server [f]
@@ -79,3 +94,30 @@
                                                  {:op      "close"
                                                   :session "1"})))
     (t/is (= ::none (get @st "1" ::none)))))
+
+(t/deftest send-test
+  (let [st (atom {})]
+    (t/is (= {:res "ok-connect"
+              :session "1"}
+             (bp/proxy! {:state          st
+                         :allow-connect? #{["localhost" *echo-port*]}
+                         :now-ms         0
+                         :session        "1"}
+                        {:op      "connect"
+                         :payload (str "localhost:" *echo-port*)})))
+    (t/is (map? (get @st "1")))
+    (let [data (bp/bytes->base64-str (.getBytes "Hello World" StandardCharsets/UTF_8))]
+      (t/is (= {:res "ok-send"}
+               (bp/proxy! {:state st}
+                          {:op "send"
+                           :session "1"
+                           :payload data})))
+      (t/is (= {:res "ok-recv"
+                :payload data}
+               (bp/proxy! {:state st}
+                          {:op "recv" :session "1"}))))
+
+    #_(t/is (= {:res "unknown-session"} (bp/proxy! {:state st}
+                                                   {:op      "close"
+                                                    :session "1"})))
+    #_(t/is (= ::none (get @st "1" ::none)))))
