@@ -1,7 +1,7 @@
 (ns com.github.ivarref.yasp
   (:require [clojure.java.io :as io]
             [clojure.string :as str])
-  (:refer-clojure :exclude [future])
+  (:refer-clojure :exclude [future]) ; no threads used :-)
   (:import (java.io BufferedInputStream BufferedOutputStream ByteArrayInputStream ByteArrayOutputStream Closeable InputStream)
            (java.net InetSocketAddress Socket SocketTimeoutException)
            (java.util Base64)))
@@ -22,8 +22,9 @@
   (let [[host port] (str/split s #":")]
     [host (Integer/valueOf port 10)]))
 
-(defn handle-connect [{:keys [state allow-connect? connect-timeout session now-ms]
+(defn handle-connect [{:keys [state allow-connect? connect-timeout session now-ms socket-timeout]
                        :or   {connect-timeout 3000
+                              socket-timeout 100
                               now-ms          (System/currentTimeMillis)
                               session         (str (random-uuid))}}
                       {:keys [payload]}]
@@ -32,7 +33,7 @@
   (let [[host port :as host-and-port] (parse-host-and-port payload)]
     (if (allow-connect? host-and-port)
       (let [sock (Socket.)]
-        (.setSoTimeout sock 200)
+        (.setSoTimeout sock socket-timeout)
         (.connect sock (InetSocketAddress. ^String host ^Integer port) ^Integer connect-timeout)
         (let [in (BufferedInputStream. (.getInputStream sock))
               out (BufferedOutputStream. (.getOutputStream sock))]
