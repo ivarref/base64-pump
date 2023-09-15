@@ -3,10 +3,11 @@
     [clj-commons.pretty.repl]
     [clojure.java.io :as io]
     [clojure.test :as t]
+    [com.github.ivarref.server :as s]
     [com.github.ivarref.yasp :as yasp]
-    [com.github.ivarref.server :as s])
-  (:import (java.io BufferedInputStream BufferedOutputStream ByteArrayInputStream)
-           (java.net ServerSocket Socket SocketTimeoutException)
+    [com.github.ivarref.yasp.impl :as impl])
+  (:import (java.io BufferedOutputStream ByteArrayInputStream)
+           (java.net Socket)
            (java.nio.charset StandardCharsets)))
 
 (set! *warn-on-reflection* true)
@@ -36,9 +37,9 @@
                             {:op      "connect"
                              :payload (str "localhost:" @ss)}))))
     (t/is (map? (get @st "1")))
-    (yasp/expire-connections! st 50001)
+    (impl/expire-connections! st 50001)
     (t/is (map? (get @st "1")))
-    (yasp/expire-connections! st 60000)
+    (impl/expire-connections! st 60000)
     (t/is (= ::none (get @st "1" ::none)))))
 
 (t/deftest close-connection
@@ -63,7 +64,7 @@
 
 (def hello-world-bytes (.getBytes "Hello World" StandardCharsets/UTF_8))
 
-(def hello-world-base64 (yasp/bytes->base64-str hello-world-bytes))
+(def hello-world-base64 (impl/bytes->base64-str hello-world-bytes))
 
 (t/deftest send-test
   (let [st (atom {})]
@@ -77,7 +78,7 @@
                             {:op      "connect"
                              :payload (str "localhost:" @ss)})))
       (t/is (map? (get @st "1")))
-      (let [data (yasp/bytes->base64-str hello-world-bytes)]
+      (let [data (impl/bytes->base64-str hello-world-bytes)]
         (t/is (= {:res     "ok-send"
                   :payload data}
                  (yasp/proxy! {:state  st
@@ -120,13 +121,13 @@
                              :payload (str "localhost:" @ss)})))
       (t/is (= {:res     "ok-send"
                 :payload hello-world-base64}
-               (yasp/proxy! {:state  st}
+               (yasp/proxy! {:state st}
                             {:op      "send"
                              :session "1"
                              :payload ""})))
 
-      (t/is (= {:res     "eof"}
-               (yasp/proxy! {:state  st}
+      (t/is (= {:res "eof"}
+               (yasp/proxy! {:state st}
                             {:op      "send"
                              :session "1"
                              :payload ""})))
