@@ -1,5 +1,4 @@
 (ns com.github.ivarref.server
-  (:require [com.github.ivarref.yasp :as yasp])
   (:import (clojure.lang IDeref)
            (java.io BufferedInputStream BufferedOutputStream Closeable)
            (java.lang AutoCloseable)
@@ -68,8 +67,8 @@
       (add-to-set! state :open-sockets sock)
       (let [fut (future (try
                           (swap! state update :active-futures (fnil inc 0))
-                          (handler {:sock sock
-                                    :state state
+                          (handler {:sock    sock
+                                    :state   state
                                     :closed? (reify
                                                IDeref,
                                                (deref [_]

@@ -91,32 +91,39 @@
     {:res "unknown-session"}))
 
 (defn read-max-bytes [^InputStream in max-bytes]
-  (let [out (ByteArrayOutputStream.)]
+  (let [out (ByteArrayOutputStream.)
+        eof? (atom false)]
     (loop [c 0]
       (when-let [r (try
                      (.read in)
                      (catch SocketTimeoutException ste
                        nil))]
-        (when (not= r -1)
-          (.write out ^Integer r)
-          (when (not= max-bytes c)
-            (recur (inc c))))))
-    (.toByteArray out)))
+        (if (= r -1)
+          (reset! eof? true)
+          (do
+            (.write out ^Integer r)
+            (when (not= max-bytes c)
+              (recur (inc c)))))))
+    (let [byte-array (.toByteArray out)]
+      (if (and @eof?
+               (= 0 (count byte-array)))
+        nil
+        byte-array))))
 
 (comment
   (String. (read-max-bytes
              (ByteArrayInputStream. (.getBytes "Hello World"))
              1024)))
 
-(defn handle-recv [{:keys [state]} {:keys [session]}]
+(defn handle-recv [{:keys [state] :as cfg} {:keys [session] :as data}]
   (assert (string? session) "Expected :session to be a string")
   (if-let [sess (get @state session)]
-    (let [{:keys [^InputStream in ^Socket socket]} sess]
-      (if (not (.isClosed socket))
-        {:res     "ok-recv"
-         :payload (bytes->base64-str (read-max-bytes in 1024))}
-        {:res "socket-closed"})
-      #_{:res "ok-close"})
+    (let [{:keys [^InputStream in]} sess]
+      (if-let [read-bytes (read-max-bytes in 1024)]
+        {:payload (bytes->base64-str read-bytes)}
+        (do
+          (handle-close cfg data)
+          {:res "eof"})))
     {:res "unknown-session"}))
 
 (defn handle-send
@@ -132,8 +139,8 @@
           (.flush out)
           (swap! state assoc-in [session :last-access] now-ms)
           (merge
-            (handle-recv cfg opts)
-            {:res "ok-send"}))
+            {:res "ok-send"}
+            (handle-recv cfg opts)))
         {:res "socket-closed"})
       #_{:res "ok-close"})
     {:res "unknown-session"}))
