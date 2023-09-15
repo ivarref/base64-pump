@@ -1,6 +1,7 @@
 (ns com.github.ivarref.yasp
   (:require [clojure.java.io :as io]
             [clojure.string :as str])
+  (:refer-clojure :exclude [future])
   (:import (java.io BufferedInputStream BufferedOutputStream ByteArrayInputStream ByteArrayOutputStream Closeable InputStream)
            (java.net InetSocketAddress Socket SocketTimeoutException)
            (java.util Base64)))
@@ -119,7 +120,7 @@
     {:res "unknown-session"}))
 
 (defn handle-send
-  [{:keys [state now-ms]} {:keys [session payload]}]
+  [{:keys [state now-ms] :as cfg} {:keys [session payload] :as opts}]
   (assert (string? session) "Expected :session to be a string")
   (assert (string? payload) "Expected :payload to be a string")
   (if-let [sess (get @state session)]
@@ -130,7 +131,9 @@
             (io/copy bais out))
           (.flush out)
           (swap! state assoc-in [session :last-access] now-ms)
-          {:res "ok-send"})
+          (merge
+            (handle-recv cfg opts)
+            {:res "ok-send"}))
         {:res "socket-closed"})
       #_{:res "ok-close"})
     {:res "unknown-session"}))
@@ -147,9 +150,6 @@
 
         (= "send" op)
         (handle-send cfg data)
-
-        (= "recv" op)
-        (handle-recv cfg data)
 
         :else
         (throw (IllegalStateException. (str "Unexpected op: " (pr-str op))))))
