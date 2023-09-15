@@ -1,9 +1,9 @@
 (ns com.github.ivarref.server
   (:require [com.github.ivarref.yasp :as yasp])
   (:import (clojure.lang IDeref)
-           (java.io Closeable)
+           (java.io BufferedInputStream BufferedOutputStream Closeable)
            (java.lang AutoCloseable)
-           (java.net InetAddress ServerSocket)))
+           (java.net InetAddress ServerSocket Socket SocketTimeoutException)))
 
 (defonce server-state (atom {}))
 
@@ -42,7 +42,25 @@
     (.accept ss)
     (catch Throwable t
       (when-not (closed? state)
-        (println "error in accept-inner:" (ex-message t))))))
+        (println "error in accept-inner:" (ex-message t)))
+      nil)))
+
+(defn echo-handler [{:keys [^Socket sock closed?]}]
+  (try
+    (with-open [in (BufferedInputStream. (.getInputStream sock))
+                out (BufferedOutputStream. (.getOutputStream sock))]
+      (loop [c 0]
+        (when-let [r (try
+                       (.read in)
+                       (catch SocketTimeoutException ste
+                         nil))]
+          (when (not= r -1)
+            (.write out ^Integer r)
+            (.flush out)
+            (recur (inc c))))))
+    (catch Throwable t
+      (when-not @closed?
+        (println "error in handle:" (ex-message t))))))
 
 (defn server-accept-loop [^ServerSocket ss state handler]
   (loop []
@@ -50,7 +68,15 @@
       (add-to-set! state :open-sockets sock)
       (let [fut (future (try
                           (swap! state update :active-futures (fnil inc 0))
-                          (handler sock)
+                          (handler {:sock sock
+                                    :state state
+                                    :closed? (reify
+                                               IDeref,
+                                               (deref [_]
+                                                 (closed? state)))})
+                          (catch Throwable t
+                            (when-not (closed? state)
+                              (println "Exception in handler:" (class t) (ex-message t))))
                           (finally
                             (swap! state update :active-futures (fnil dec 0)))))]
         (add-to-set! state :futures fut))
