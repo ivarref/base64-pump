@@ -61,7 +61,7 @@
     (let [s @state]
       (doseq [[session-id {:keys [socket in out last-access]}] s]
         (let [inactive-ms (- now-ms last-access)]
-          (when (>= inactive-ms 60000)
+          (when (>= inactive-ms (* 10 60000))
             (close-silently! in)
             (close-silently! out)
             (close-silently! socket)
@@ -152,6 +152,7 @@
   [{:keys [state] :as cfg} {:keys [op] :as data}]
   (assert (some? state))
   (assert (string? op) "Expected :op to be a string")
+  (expire-connections! state (:now-ms cfg))
   (cond (= "connect" op)
         (handle-connect cfg data)
 

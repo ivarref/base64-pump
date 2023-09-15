@@ -39,7 +39,7 @@
     (t/is (map? (get @st "1")))
     (impl/expire-connections! st 50001)
     (t/is (map? (get @st "1")))
-    (impl/expire-connections! st 60000)
+    (impl/expire-connections! st 600000)
     (t/is (= ::none (get @st "1" ::none)))))
 
 (t/deftest close-connection
@@ -54,7 +54,8 @@
                             {:op      "connect"
                              :payload (str "localhost:" @ss)})))
       (t/is (map? (get @st "1")))
-      (t/is (= {:res "ok-close"} (yasp/proxy! {:state st}
+      (t/is (= {:res "ok-close"} (yasp/proxy! {:state  st
+                                               :now-ms 1}
                                               {:op      "close"
                                                :session "1"})))
       (t/is (= {:res "unknown-session"} (yasp/proxy! {:state st}
@@ -121,13 +122,15 @@
                              :payload (str "localhost:" @ss)})))
       (t/is (= {:res     "ok-send"
                 :payload hello-world-base64}
-               (yasp/proxy! {:state st}
+               (yasp/proxy! {:state st
+                             :now-ms 1}
                             {:op      "send"
                              :session "1"
                              :payload ""})))
 
       (t/is (= {:res "eof"}
-               (yasp/proxy! {:state st}
+               (yasp/proxy! {:state st
+                             :now-ms 2}
                             {:op      "send"
                              :session "1"
                              :payload ""})))
