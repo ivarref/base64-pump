@@ -88,7 +88,7 @@
         ret (reify
               AutoCloseable
               (close [_]
-                (yasp/close-silently! ss state))
+                (close! state))
               IDeref
               (deref [_]
                 (.getLocalPort ss)))
