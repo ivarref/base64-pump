@@ -1,4 +1,4 @@
-(ns com.github.ivarref.base64-pump
+(ns com.github.ivarref.yasp
   (:require [clojure.java.io :as io]
             [clojure.string :as str])
   (:import (java.io BufferedInputStream BufferedOutputStream ByteArrayInputStream ByteArrayOutputStream Closeable InputStream)
