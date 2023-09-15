@@ -9,6 +9,8 @@
            (java.net ServerSocket Socket SocketTimeoutException)
            (java.nio.charset StandardCharsets)))
 
+(set! *warn-on-reflection* true)
+
 (clj-commons.pretty.repl/install-pretty-exceptions)
 
 (t/deftest disallow-connect
@@ -96,7 +98,7 @@
 
         (t/is (= 2 (get-in @st ["1" :last-access])))))))
 
-(defn say-hello [{:keys [sock closed?]}]
+(defn say-hello [{:keys [^Socket sock closed?]}]
   (try
     (with-open [in (ByteArrayInputStream. hello-world-bytes)
                 out (BufferedOutputStream. (.getOutputStream sock))]

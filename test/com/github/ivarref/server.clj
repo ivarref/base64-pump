@@ -105,7 +105,7 @@
     ret))
 
 (defn start-server!
-  [{:keys [state] :as cfg} handler]
+  ^AutoCloseable [{:keys [state] :as cfg} handler]
   (start-server-impl!
     (assoc cfg :state (or state server-state))
     handler))
