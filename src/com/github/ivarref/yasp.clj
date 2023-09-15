@@ -5,6 +5,8 @@
            (java.net InetSocketAddress Socket SocketTimeoutException)
            (java.util Base64)))
 
+(comment
+  (set! *warn-on-reflection* true))
 ; connect
 ; send/recv
 ; close
@@ -95,7 +97,7 @@
                      (catch SocketTimeoutException ste
                        nil))]
         (when (not= r -1)
-          (.write out r)
+          (.write out ^Integer r)
           (when (not= max-bytes c)
             (recur (inc c))))))
     (.toByteArray out)))
