@@ -1,11 +1,10 @@
 (ns com.github.ivarref.server
-  (:require [clojure.java.io :as io]
-            [com.github.ivarref.yasp.impl :as impl])
   (:refer-clojure :exclude [println])
+  (:require [com.github.ivarref.yasp.impl :as impl])
   (:import (clojure.lang IDeref)
-           (java.io BufferedInputStream BufferedOutputStream ByteArrayInputStream Closeable)
+           (java.io BufferedInputStream BufferedOutputStream Closeable)
            (java.lang AutoCloseable)
-           (java.net InetAddress ServerSocket Socket SocketTimeoutException)))
+           (java.net InetAddress ServerSocket Socket)))
 
 (defn add-to-set! [state key what]
   (swap! state (fn [old-state] (update old-state key (fnil conj #{}) what))))
@@ -55,9 +54,7 @@
       (loop []
         (if-let [chunk (impl/read-max-bytes in 1024)]
           (do
-            (with-open [chunk-stream (ByteArrayInputStream. chunk)]
-              (io/copy chunk-stream out)
-              (.flush out))
+            (impl/copy-bytes chunk out)
             (recur))
           (do
             (impl/atomic-println "Echo handler: EOF reached")))))

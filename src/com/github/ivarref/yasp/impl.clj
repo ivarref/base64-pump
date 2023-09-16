@@ -1,8 +1,8 @@
 (ns com.github.ivarref.yasp.impl
   (:require [clojure.java.io :as io]
             [clojure.string :as str])
-  (:refer-clojure :exclude [future println])                        ; no threads used :-)
-  (:import (java.io BufferedInputStream BufferedOutputStream ByteArrayInputStream ByteArrayOutputStream Closeable InputStream)
+  (:refer-clojure :exclude [future println])                ; no threads used :-)
+  (:import (java.io BufferedInputStream BufferedOutputStream ByteArrayInputStream ByteArrayOutputStream Closeable InputStream OutputStream)
            (java.net InetSocketAddress Socket SocketTimeoutException)
            (java.util Base64)))
 
@@ -15,6 +15,11 @@
     (binding [*out* *err*]
       (apply clojure.core/println args)
       (flush))))
+
+(defn copy-bytes [in-bytes ^OutputStream os]
+  (with-open [bais (ByteArrayInputStream. in-bytes)]
+    (io/copy bais os)
+    (.flush os)))
 
 (comment
   (set! *warn-on-reflection* true))
@@ -138,7 +143,10 @@
   (if-let [sess (get @state session)]
     (let [{:keys [^InputStream in]} sess]
       (if-let [read-bytes (read-max-bytes in 1024)]
-        {:payload (bytes->base64-str read-bytes)}
+        (do
+          (when (pos-int? (count read-bytes))
+            (atomic-println "Proxy: Received" (count read-bytes) "bytes from remote"))
+          {:payload (bytes->base64-str read-bytes)})
         (do
           (handle-close cfg data)
           {:res "eof"})))
@@ -149,19 +157,15 @@
   (assert (string? session) "Expected :session to be a string")
   (assert (string? payload) "Expected :payload to be a string")
   (if-let [sess (get @state session)]
-    (let [{:keys [^BufferedOutputStream out ^Socket socket]} sess]
-      (if (not (.isClosed socket))
-        (let [bytes-to-send (base64-str->bytes payload)]
-          (with-open [bais (ByteArrayInputStream. bytes-to-send)]
-            (io/copy bais out))
-          (.flush out)
-          (atomic-println "Proxy: Wrote" (count bytes-to-send)
-                          "bytes to remote")
-          (swap! state assoc-in [session :last-access] now-ms)
-          (merge
-            {:res "ok-send"}
-            (handle-recv cfg opts)))
-        {:res "socket-closed"})
+    (let [{:keys [^BufferedOutputStream out ^Socket socket]} sess
+          bytes-to-send (base64-str->bytes payload)]
+      (copy-bytes bytes-to-send out)
+      (when (pos-int? (count bytes-to-send))
+        (atomic-println "Proxy: Wrote" (count bytes-to-send) "bytes to remote"))
+      (swap! state assoc-in [session :last-access] now-ms)
+      (merge
+        {:res "ok-send"}
+        (handle-recv cfg opts))
       #_{:res "ok-close"})
     {:res "unknown-session"}))
 
@@ -170,7 +174,6 @@
   (assert (some? state))
   (assert (string? op) "Expected :op to be a string")
   (expire-connections! state (:now-ms cfg))
-  (atomic-println "Proxy: Handle operation" op)
   (cond (= "connect" op)
         (handle-connect cfg data)
 
