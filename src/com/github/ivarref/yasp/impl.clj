@@ -37,9 +37,9 @@
   (let [[host port] (str/split s #":")]
     [host (Integer/valueOf port 10)]))
 
-(defn handle-connect [{:keys [state allow-connect? connect-timeout session now-ms socket-timeout]
+(defn handle-connect [{:keys [state allow-connect? connect-timeout session now-ms so-timeout]
                        :or   {connect-timeout 3000
-                              socket-timeout  100
+                              so-timeout      100
                               now-ms          (System/currentTimeMillis)
                               session         (str (random-uuid))}}
                       {:keys [payload]}]
@@ -48,7 +48,7 @@
   (let [[host port :as host-and-port] (parse-host-and-port payload)]
     (if (allow-connect? host-and-port)
       (let [sock (Socket.)]
-        (.setSoTimeout sock socket-timeout)
+        (.setSoTimeout sock so-timeout)
         (.connect sock (InetSocketAddress. ^String host ^Integer port) ^Integer connect-timeout)
         (let [in (BufferedInputStream. (.getInputStream sock))
               out (BufferedOutputStream. (.getOutputStream sock))]

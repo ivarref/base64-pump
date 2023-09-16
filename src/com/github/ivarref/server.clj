@@ -64,7 +64,7 @@
     (finally
       (impl/atomic-println "Echo handler exiting"))))
 
-(defn server-accept-loop [^ServerSocket ss {:keys [so-timeout state]} handler]
+(defn server-accept-loop [^ServerSocket ss {:keys [so-timeout state] :as _cfg} handler]
   (loop []
     (when-let [^Socket sock (accept-inner ss state)]
       (.setSoTimeout sock (or so-timeout 100))
