@@ -1,12 +1,20 @@
 (ns com.github.ivarref.yasp.impl
   (:require [clojure.java.io :as io]
             [clojure.string :as str])
-  (:refer-clojure :exclude [future])                        ; no threads used :-)
+  (:refer-clojure :exclude [future println])                        ; no threads used :-)
   (:import (java.io BufferedInputStream BufferedOutputStream ByteArrayInputStream ByteArrayOutputStream Closeable InputStream)
            (java.net InetSocketAddress Socket SocketTimeoutException)
            (java.util Base64)))
 
 ; Private API, subject to change
+
+(defonce lock (Object.))
+
+(defn atomic-println [& args]
+  (locking lock
+    (binding [*out* *err*]
+      (apply clojure.core/println args)
+      (flush))))
 
 (comment
   (set! *warn-on-reflection* true))
@@ -72,7 +80,7 @@
   (when state
     (let [s @state]
       (doseq [[session-id {:keys [socket in out]}] s]
-        (println "closing" session-id)))))
+        (atomic-println "closing" session-id)))))
 
 (comment
   (defonce s (atom {}))
@@ -140,6 +148,7 @@
           (with-open [bais (ByteArrayInputStream. bytes-to-send)]
             (io/copy bais out))
           (.flush out)
+          (atomic-println "Wrote" (count bytes-to-send))
           (swap! state assoc-in [session :last-access] now-ms)
           (merge
             {:res "ok-send"}
@@ -153,6 +162,7 @@
   (assert (some? state))
   (assert (string? op) "Expected :op to be a string")
   (expire-connections! state (:now-ms cfg))
+  (atomic-println "Handle operation" op)
   (cond (= "connect" op)
         (handle-connect cfg data)
 

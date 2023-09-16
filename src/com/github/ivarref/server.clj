@@ -1,4 +1,6 @@
 (ns com.github.ivarref.server
+  (:require [com.github.ivarref.yasp.impl :as impl])
+  (:refer-clojure :exclude [println])
   (:import (clojure.lang IDeref)
            (java.io BufferedInputStream BufferedOutputStream Closeable)
            (java.lang AutoCloseable)
@@ -14,7 +16,7 @@
   (when (and sock (instance? Closeable sock))
     (try
       (.close sock)
-      (catch Throwable t
+      (catch Throwable _t
         nil)
       (finally
         (remove-from-set state :open-sockets sock)))))
@@ -26,7 +28,7 @@
   (doseq [fut (get @state :futures)]
     (if (= :timeout (deref fut 1000 :timeout))
       (do
-        (println "Timeout waiting for future" fut))
+        (impl/atomic-println "Timeout waiting for future" fut))
       (remove-from-set state :futures fut)))
   (swap! state dissoc :closed?))
 
@@ -39,7 +41,7 @@
     (.accept ss)
     (catch Throwable t
       (when-not (closed? state)
-        (println "error in accept-inner:" (ex-message t)))
+        (impl/atomic-println "error in accept-inner:" (ex-message t)))
       nil)))
 
 (defn echo-handler [{:keys [^Socket sock closed?]}]
@@ -57,31 +59,37 @@
             (recur (inc c))))))
     (catch Throwable t
       (when-not @closed?
-        (println "error in handle:" (ex-message t))))))
+        (impl/atomic-println "error in handle:" (ex-message t))))))
 
-(defn server-accept-loop [^ServerSocket ss state handler]
+(defn server-accept-loop [^ServerSocket ss {:keys [so-timeout state]} handler]
   (loop []
-    (when-let [sock (accept-inner ss state)]
+    (when-let [^Socket sock (accept-inner ss state)]
+      (.setSoTimeout sock (or so-timeout 100))
       (add-to-set! state :open-sockets sock)
       (let [fut (future (try
                           (swap! state update :active-futures (fnil inc 0))
-                          (handler {:sock    sock
-                                    :state   state
-                                    :closed? (reify
-                                               IDeref,
-                                               (deref [_]
-                                                 (closed? state)))})
+                          (try
+                            (handler {:sock    sock
+                                      :state   state
+                                      :closed? (reify
+                                                 IDeref,
+                                                 (deref [_]
+                                                   (closed? state)))})
+                            (finally
+                              (close-silently! sock state)))
                           (catch Throwable t
                             (when-not (closed? state)
-                              (println "Exception in handler:" (class t) (ex-message t))))
+                              (impl/atomic-println "Exception in handler:" (class t) (ex-message t))))
                           (finally
                             (swap! state update :active-futures (fnil dec 0)))))]
         (add-to-set! state :futures fut))
       (recur))))
 
 (defn start-server-impl!
-  [{:keys [state]} handler]
-  (let [ss (ServerSocket. 0 100 (InetAddress/getLoopbackAddress))
+  [{:keys [state port] :as cfg} handler]
+  (let [ss (ServerSocket. (if port
+                            port
+                            0) 100 (InetAddress/getLoopbackAddress))
         ret (reify
               AutoCloseable
               (close [_]
@@ -94,7 +102,7 @@
                 (swap! state update :active-futures (fnil inc 0))
                 (server-accept-loop
                   ss
-                  state
+                  cfg
                   handler)
                 (finally
                   (swap! state update :active-futures (fnil dec 0)))))]

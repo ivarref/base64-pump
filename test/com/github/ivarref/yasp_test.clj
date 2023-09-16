@@ -107,7 +107,7 @@
       (io/copy in out))
     (catch Throwable t
       (when-not @closed?
-        (println "error in say-hello:" (ex-message t))))))
+        (impl/atomic-println "error in say-hello:" (ex-message t))))))
 
 (t/deftest send-eof-test
   (let [st (atom {})]

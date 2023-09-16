@@ -1,6 +1,6 @@
 (ns com.github.ivarref.yasp
   (:require [com.github.ivarref.yasp.impl :as impl])
-  (:refer-clojure :exclude [future]))                       ; no threads used :-)
+  (:refer-clojure :exclude [future println]))                       ; no threads used :-)
 
 (defonce default-state (atom {}))
 
