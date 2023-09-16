@@ -4,8 +4,6 @@
            (java.lang AutoCloseable)
            (java.net InetAddress ServerSocket Socket SocketTimeoutException)))
 
-(defonce server-state (atom {}))
-
 (defn add-to-set! [state key what]
   (swap! state (fn [old-state] (update old-state key (fnil conj #{}) what))))
 
@@ -104,9 +102,22 @@
     (add-to-set! state :futures fut)
     ret))
 
+(defonce server-state (atom {}))
+
 (defn start-server!
-  ^AutoCloseable [{:keys [state] :as cfg} handler]
-  (start-server-impl!
-    (assoc cfg :state (or state server-state))
-    handler))
+  "
+  cfg: Configuration map.
+
+  Arguments:
+
+  `handler` should be a function that takes a single map with the keys:
+  * `sock` of type java.net.Socket.
+  * `closed?` of type clojure.lang.IDeref. This is `true` if the server
+  is shutting down. Can be used to suppress warnings/errors occurring on shutdown."
+  (^AutoCloseable [cfg handler]
+   (start-server! server-state cfg handler))
+  (^AutoCloseable [state cfg handler]
+   (start-server-impl!
+     (assoc cfg :state state)
+     handler)))
 

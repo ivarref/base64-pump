@@ -16,7 +16,7 @@
 
 (t/deftest disallow-connect
   (let [st (atom {})]
-    (with-open [ss (s/start-server! {:state (atom {})} s/echo-handler)]
+    (with-open [ss (s/start-server! (atom {}) {} s/echo-handler)]
       (t/is (= {:res "disallow-connect"}
                (yasp/proxy! {:state          st
                              :allow-connect? #{}
@@ -27,7 +27,7 @@
 
 (t/deftest expire-connections
   (let [st (atom {})]
-    (with-open [ss (s/start-server! {:state (atom {})} s/echo-handler)]
+    (with-open [ss (s/start-server! (atom {}) {} s/echo-handler)]
       (t/is (= {:res     "ok-connect"
                 :session "1"}
                (yasp/proxy! {:state          st
@@ -44,7 +44,7 @@
 
 (t/deftest close-connection
   (let [st (atom {})]
-    (with-open [ss (s/start-server! {:state (atom {})} s/echo-handler)]
+    (with-open [ss (s/start-server! (atom {}) {} s/echo-handler)]
       (t/is (= {:res     "ok-connect"
                 :session "1"}
                (yasp/proxy! {:state          st
@@ -69,7 +69,7 @@
 
 (t/deftest send-test
   (let [st (atom {})]
-    (with-open [ss (s/start-server! {:state (atom {})} s/echo-handler)]
+    (with-open [ss (s/start-server! (atom {}) {} s/echo-handler)]
       (t/is (= {:res     "ok-connect"
                 :session "1"}
                (yasp/proxy! {:state          st
@@ -111,7 +111,7 @@
 
 (t/deftest send-eof-test
   (let [st (atom {})]
-    (with-open [ss (s/start-server! {:state (atom {})} say-hello)]
+    (with-open [ss (s/start-server! (atom {}) {} say-hello)]
       (t/is (= {:res     "ok-connect"
                 :session "1"}
                (yasp/proxy! {:state          st
@@ -135,5 +135,3 @@
                              :session "1"
                              :payload ""})))
       (t/is (= {} @st)))))
-
-
