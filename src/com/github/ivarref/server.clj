@@ -1,8 +1,9 @@
 (ns com.github.ivarref.server
-  (:require [com.github.ivarref.yasp.impl :as impl])
+  (:require [clojure.java.io :as io]
+            [com.github.ivarref.yasp.impl :as impl])
   (:refer-clojure :exclude [println])
   (:import (clojure.lang IDeref)
-           (java.io BufferedInputStream BufferedOutputStream Closeable)
+           (java.io BufferedInputStream BufferedOutputStream ByteArrayInputStream Closeable)
            (java.lang AutoCloseable)
            (java.net InetAddress ServerSocket Socket SocketTimeoutException)))
 
@@ -20,6 +21,9 @@
         nil)
       (finally
         (remove-from-set state :open-sockets sock)))))
+
+#_(comment
+    (impl/read-max-bytes))
 
 (defn close! [state]
   (swap! state assoc :closed? true)
@@ -48,18 +52,20 @@
   (try
     (with-open [in (BufferedInputStream. (.getInputStream sock))
                 out (BufferedOutputStream. (.getOutputStream sock))]
-      (loop [c 0]
-        (when-let [r (try
-                       (.read in)
-                       (catch SocketTimeoutException ste
-                         nil))]
-          (when (not= r -1)
-            (.write out ^Integer r)
-            (.flush out)
-            (recur (inc c))))))
+      (loop []
+        (if-let [chunk (impl/read-max-bytes in 1024)]
+          (do
+            (with-open [chunk-stream (ByteArrayInputStream. chunk)]
+              (io/copy chunk-stream out)
+              (.flush out))
+            (recur))
+          (do
+            (impl/atomic-println "Echo handler: EOF reached")))))
     (catch Throwable t
       (when-not @closed?
-        (impl/atomic-println "error in handle:" (ex-message t))))))
+        (impl/atomic-println "Echo handler: Error:" (ex-message t))))
+    (finally
+      (impl/atomic-println "Echo handler exiting"))))
 
 (defn server-accept-loop [^ServerSocket ss {:keys [so-timeout state]} handler]
   (loop []

@@ -101,12 +101,19 @@
         {:res "ok-close"})
     {:res "unknown-session"}))
 
-(defn read-max-bytes [^InputStream in max-bytes]
+(defn read-max-bytes
+  "Read `max-bytes` from inputstream `is`.
+
+  Returns a byte array of 0 or more bytes.
+  Returns nil when EOF is reached and no byte was read.
+
+  Returns the byte array if a SocketTimeoutException occurs."
+  [^InputStream is max-bytes]
   (let [out (ByteArrayOutputStream.)
         eof? (atom false)]
     (loop [c 0]
       (when-let [r (try
-                     (.read in)
+                     (.read is)
                      (catch SocketTimeoutException ste
                        nil))]
         (if (= r -1)
@@ -148,7 +155,8 @@
           (with-open [bais (ByteArrayInputStream. bytes-to-send)]
             (io/copy bais out))
           (.flush out)
-          (atomic-println "Wrote" (count bytes-to-send))
+          (atomic-println "Proxy: Wrote" (count bytes-to-send)
+                          "bytes to remote")
           (swap! state assoc-in [session :last-access] now-ms)
           (merge
             {:res "ok-send"}
@@ -162,7 +170,7 @@
   (assert (some? state))
   (assert (string? op) "Expected :op to be a string")
   (expire-connections! state (:now-ms cfg))
-  (atomic-println "Handle operation" op)
+  (atomic-println "Proxy: Handle operation" op)
   (cond (= "connect" op)
         (handle-connect cfg data)
 
