@@ -28,10 +28,15 @@
   `:connect-timeout`: Connect timeout in milliseconds.
   The client may override this setting when connecting.
   Default value is 3000.
+
+  `:chunk-size`: Size of buffer to use.
+  The client may override this setting when connecting.
+  Default value is 65536.
   "
-  [{:keys [allow-connect? socket-timeout connect-timeout]
+  [{:keys [allow-connect? socket-timeout connect-timeout chunk-size]
     :or   {socket-timeout  100
-           connect-timeout 3000}
+           connect-timeout 3000
+           chunk-size 65536}
     :as   cfg}
    data]
   (assert (map? data) "Expected data to be a map")
@@ -42,6 +47,7 @@
       :state (get cfg :state default-state)
       :now-ms (get cfg :now-ms (System/currentTimeMillis))
       :session (get cfg :session (str (random-uuid)))
+      :chunk-size (get cfg :chunk-size chunk-size)
       :socket-timeout socket-timeout
       :connect-timeout connect-timeout)
     data))

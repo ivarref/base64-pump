@@ -11,7 +11,7 @@
 (comment
   (set! *warn-on-reflection* true))
 
-(defn handle-connect [{:keys [state allow-connect? connect-timeout session now-ms socket-timeout]}
+(defn handle-connect [{:keys [state allow-connect? connect-timeout session now-ms socket-timeout chunk-size]}
                       {:keys [payload]}]
   (assert (some? allow-connect?) "Expected :allow-connect? to be present")
   (assert (string? payload) "Expected :payload to be a string")
@@ -19,7 +19,8 @@
     (if (allow-connect? (select-keys client-config [:host :port]))
       (let [sock (Socket.)
             socket-timeout (get client-config :socket-timeout socket-timeout)
-            connect-timeout (get client-config :connect-timeout connect-timeout)]
+            connect-timeout (get client-config :connect-timeout connect-timeout)
+            chunk-size (get client-config :chunk-size chunk-size)]
         (.setSoTimeout sock socket-timeout)
         (.connect sock (InetSocketAddress. ^String host ^Integer port) ^Integer connect-timeout)
         (let [in (BufferedInputStream. (.getInputStream sock))
@@ -29,7 +30,8 @@
                                           {:socket      sock
                                            :in          in
                                            :out         out
-                                           :last-access now-ms})))
+                                           :last-access now-ms
+                                           :chunk-size  chunk-size})))
           {:res     "ok-connect"
            :session session}))
       {:res "disallow-connect"})))
@@ -60,8 +62,8 @@
 (defn handle-recv [{:keys [state] :as cfg} {:keys [session] :as data}]
   (assert (string? session) "Expected :session to be a string")
   (if-let [sess (get @state session)]
-    (let [{:keys [^InputStream in]} sess]
-      (if-let [read-bytes (u/read-max-bytes in 1024)]
+    (let [{:keys [^InputStream in chunk-size]} sess]
+      (if-let [read-bytes (u/read-max-bytes in chunk-size)]
         (do
           (if (pos-int? (count read-bytes))
             (log/debug "Proxy: Received" (count read-bytes) "bytes from remote")
