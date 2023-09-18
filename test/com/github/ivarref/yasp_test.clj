@@ -5,7 +5,8 @@
     [clojure.test :as t]
     [com.github.ivarref.server :as s]
     [com.github.ivarref.yasp :as yasp]
-    [com.github.ivarref.yasp.impl :as impl])
+    [com.github.ivarref.yasp.impl :as impl]
+    [com.github.ivarref.yasp.utils :as u])
   (:import (java.io BufferedOutputStream ByteArrayInputStream)
            (java.net Socket)
            (java.nio.charset StandardCharsets)))
@@ -23,7 +24,7 @@
                              :now-ms         0
                              :session        "1"}
                             {:op      "connect"
-                             :payload (impl/pr-str-safe {:host "localhost" :port @ss})}))))))
+                             :payload (u/pr-str-safe {:host "localhost" :port @ss})}))))))
 
 (t/deftest expire-connections
   (let [st (atom {})]
@@ -35,7 +36,7 @@
                              :now-ms         0
                              :session        "1"}
                             {:op      "connect"
-                             :payload (impl/pr-str-safe {:host "localhost" :port @ss})}))))
+                             :payload (u/pr-str-safe {:host "localhost" :port @ss})}))))
     (t/is (map? (get @st "1")))
     (impl/expire-connections! st 50001)
     (t/is (map? (get @st "1")))
@@ -52,7 +53,7 @@
                              :now-ms         0
                              :session        "1"}
                             {:op      "connect"
-                             :payload (impl/pr-str-safe {:host "localhost" :port @ss})})))
+                             :payload (u/pr-str-safe {:host "localhost" :port @ss})})))
       (t/is (map? (get @st "1")))
       (t/is (= {:res "ok-close"} (yasp/proxy! {:state          st
                                                :allow-connect? #{{:host "localhost" :port @ss}}
@@ -67,7 +68,7 @@
 
 (def hello-world-bytes (.getBytes "Hello World" StandardCharsets/UTF_8))
 
-(def hello-world-base64 (impl/bytes->base64-str hello-world-bytes))
+(def hello-world-base64 (u/bytes->base64-str hello-world-bytes))
 
 (defn send-and-read! [cfg data read-times]
   (let [received (atom {})
@@ -88,7 +89,7 @@
         (t/is (= {:res     "ok-connect"
                   :session "1"}
                  (yasp/proxy! cfg {:op      "connect"
-                                   :payload (impl/pr-str-safe {:host "localhost" :port @ss})})))
+                                   :payload (u/pr-str-safe {:host "localhost" :port @ss})})))
         (t/is (map? (get @st "1")))
 
         (t/is (= {{:res "ok-send", :payload ""}                 10
@@ -107,7 +108,7 @@
       (.flush out))
     (catch Throwable t
       (when-not @closed?
-        (impl/atomic-println "error in say-hello:" (ex-message t))))))
+        (u/atomic-println "error in say-hello:" (ex-message t))))))
 
 (t/deftest send-eof-test
   (let [st (atom {})]
@@ -119,7 +120,7 @@
                   :session "1"}
                  (yasp/proxy! cfg
                               {:op      "connect"
-                               :payload (impl/pr-str-safe {:host "localhost" :port @ss})})))
+                               :payload (u/pr-str-safe {:host "localhost" :port @ss})})))
         (let [recv (send-and-read!
                      cfg
                      {:op      "send"

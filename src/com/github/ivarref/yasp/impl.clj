@@ -1,61 +1,16 @@
 (ns com.github.ivarref.yasp.impl
-  (:refer-clojure :exclude [future println])
+  (:refer-clojure :exclude [future println])                ; no threads used :-)
   (:require [clojure.edn :as edn]
-            [clojure.java.io :as io]
-            [clojure.string :as str]
-            [clojure.tools.logging :as log])                ; no threads used :-)
-  (:import (java.io BufferedInputStream BufferedOutputStream ByteArrayInputStream ByteArrayOutputStream Closeable InputStream OutputStream)
-           (java.net InetSocketAddress Socket SocketTimeoutException)
-           (java.util Base64)))
+            [com.github.ivarref.yasp.utils :as u]
+            [clojure.tools.logging :as log])
+  (:import (java.io BufferedInputStream BufferedOutputStream InputStream)
+           (java.net InetSocketAddress Socket)))
 
 ; Private API, subject to change
 
-(defonce lock (Object.))
-
-(defn atomic-println [& args]
-  (locking lock
-    (binding [*out* *err*]
-      (apply clojure.core/println args)
-      (flush))))
-
-(defn pr-str-inner [x]
-  (binding [*print-dup* false
-            *print-meta* false
-            *print-readably* true
-            *print-length* nil
-            *print-level* nil
-            *print-namespace-maps* false]
-    (pr-str x)))
-
-(defn pr-str-safe [x]
-  (try
-    (if (= x (edn/read-string (pr-str-inner x)))
-      (pr-str-inner x)
-      (throw (ex-info (str "Could not read-string") {:input x})))
-    (catch Throwable t
-      (log/error t "could not read-string:" (ex-message t))
-      (throw t))))
-
-(defn copy-bytes [in-bytes ^OutputStream os]
-  (with-open [bais (ByteArrayInputStream. in-bytes)]
-    (io/copy bais os)
-    (.flush os)))
-
-(comment
-  (set! *warn-on-reflection* true))
-; connect
-; send/recv
-; close
-
-(defn bytes->base64-str [bytes]
-  (.encodeToString (Base64/getEncoder) bytes))
-
-(defn base64-str->bytes [^String base64-str]
-  (.decode (Base64/getDecoder) base64-str))
-
 (defn handle-connect [{:keys [state allow-connect? connect-timeout session now-ms socket-timeout]
-                       :or   {now-ms          (System/currentTimeMillis)
-                              session         (str (random-uuid))}}
+                       :or   {now-ms  (System/currentTimeMillis)
+                              session (str (random-uuid))}}
                       {:keys [payload]}]
   (assert (some? allow-connect?) "Expected :allow-connect? to be present")
   (assert (string? payload) "Expected :payload to be a string")
@@ -76,22 +31,15 @@
            :session session}))
       {:res "disallow-connect"})))
 
-(defn close-silently! [^Closeable c]
-  (when (and c (instance? Closeable c))
-    (try
-      (.close c)
-      (catch Throwable t
-        nil))))
-
 (defn expire-connections! [state now-ms]
   (when state
     (let [s @state]
       (doseq [[session-id {:keys [socket in out last-access]}] s]
         (let [inactive-ms (- now-ms last-access)]
           (when (>= inactive-ms (* 10 60000))
-            (close-silently! in)
-            (close-silently! out)
-            (close-silently! socket)
+            (u/close-silently! in)
+            (u/close-silently! out)
+            (u/close-silently! socket)
             (swap! state dissoc session-id)
             #_(println "closing" session-id)))))))
 
@@ -99,54 +47,22 @@
   [{:keys [state]} {:keys [session]}]
   (assert (string? session) "Expected :session to be a string")
   (if-let [sess (get @state session)]
-    (do (close-silently! (get sess :in))
-        (close-silently! (get sess :out))
-        (close-silently! (get sess :socket))
+    (do (u/close-silently! (get sess :in))
+        (u/close-silently! (get sess :out))
+        (u/close-silently! (get sess :socket))
         (swap! state dissoc session)
         {:res "ok-close"})
     {:res "unknown-session"}))
-
-(defn read-max-bytes
-  "Read `max-bytes` from inputstream `is`.
-
-  Returns a byte array of 0 or more bytes.
-  Returns nil when EOF is reached and no byte was read.
-
-  Returns the byte array if a SocketTimeoutException occurs."
-  [^InputStream is max-bytes]
-  (let [out (ByteArrayOutputStream.)
-        eof? (atom false)]
-    (loop [c 0]
-      (when-let [r (try
-                     (.read is)
-                     (catch SocketTimeoutException ste
-                       nil))]
-        (if (= r -1)
-          (reset! eof? true)
-          (do
-            (.write out ^Integer r)
-            (when (not= max-bytes c)
-              (recur (inc c)))))))
-    (let [byte-array (.toByteArray out)]
-      (if (and @eof?
-               (= 0 (count byte-array)))
-        nil
-        byte-array))))
-
-(comment
-  (String. (read-max-bytes
-             (ByteArrayInputStream. (.getBytes "Hello World"))
-             1024)))
 
 (defn handle-recv [{:keys [state] :as cfg} {:keys [session] :as data}]
   (assert (string? session) "Expected :session to be a string")
   (if-let [sess (get @state session)]
     (let [{:keys [^InputStream in]} sess]
-      (if-let [read-bytes (read-max-bytes in 1024)]
+      (if-let [read-bytes (u/read-max-bytes in 1024)]
         (do
           (when (pos-int? (count read-bytes))
-            (atomic-println "Proxy: Received" (count read-bytes) "bytes from remote"))
-          {:payload (bytes->base64-str read-bytes)})
+            (log/debug "Proxy: Received" (count read-bytes) "bytes from remote"))
+          {:payload (u/bytes->base64-str read-bytes)})
         (do
           (handle-close cfg data)
           {:res "eof"})))
@@ -157,11 +73,11 @@
   (assert (string? session) "Expected :session to be a string")
   (assert (string? payload) "Expected :payload to be a string")
   (if-let [sess (get @state session)]
-    (let [{:keys [^BufferedOutputStream out ^Socket socket]} sess
-          bytes-to-send (base64-str->bytes payload)]
-      (copy-bytes bytes-to-send out)
+    (let [{:keys [^BufferedOutputStream out]} sess
+          bytes-to-send (u/base64-str->bytes payload)]
+      (u/copy-bytes bytes-to-send out)
       (when (pos-int? (count bytes-to-send))
-        (atomic-println "Proxy: Wrote" (count bytes-to-send) "bytes to remote"))
+        (log/debug "Proxy: Wrote" (count bytes-to-send) "bytes to remote"))
       (swap! state assoc-in [session :last-access] now-ms)
       (merge
         {:res "ok-send"}

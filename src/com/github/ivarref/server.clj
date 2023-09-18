@@ -1,6 +1,7 @@
 (ns com.github.ivarref.server
   (:refer-clojure :exclude [println])
-  (:require [com.github.ivarref.yasp.impl :as impl])
+  (:require [clojure.tools.logging :as log]
+            [com.github.ivarref.yasp.utils :as u])
   (:import (clojure.lang IDeref)
            (java.io BufferedInputStream BufferedOutputStream Closeable)
            (java.lang AutoCloseable)
@@ -28,7 +29,7 @@
   (doseq [fut (get @state :futures)]
     (if (= :timeout (deref fut 1000 :timeout))
       (do
-        (impl/atomic-println "Timeout waiting for future" fut))
+        (log/warn "Timeout waiting for future" fut))
       (remove-from-set state :futures fut)))
   (swap! state dissoc :closed?))
 
@@ -40,8 +41,9 @@
   (try
     (.accept ss)
     (catch Throwable t
-      (when-not (closed? state)
-        (impl/atomic-println "error in accept-inner:" (ex-message t)))
+      (if-not (closed? state)
+        (log/error t "Error in accept-inner:" (ex-message t))
+        (log/debug t "Error in accept-inner:" (ex-message t)))
       nil)))
 
 (defn echo-handler [{:keys [^Socket sock closed?]}]
@@ -49,18 +51,18 @@
     (with-open [in (BufferedInputStream. (.getInputStream sock))
                 out (BufferedOutputStream. (.getOutputStream sock))]
       (loop []
-        (if-let [chunk (impl/read-max-bytes in 1024)]
+        (if-let [chunk (u/read-max-bytes in 1024)]
           (do
-            (impl/copy-bytes chunk out)
-            (.flush out)
+            (u/copy-bytes chunk out)
             (recur))
           (do
-            (impl/atomic-println "Echo handler: EOF reached")))))
+            (log/debug "Echo handler: EOF reached")))))
     (catch Throwable t
-      (when-not @closed?
-        (impl/atomic-println "Echo handler: Error:" (ex-message t))))
+      (if-not @closed?
+        (log/error t "Echo handler error:" (ex-message t))
+        (log/debug t "Echo handler error:" (ex-message t))))
     (finally
-      (impl/atomic-println "Echo handler exiting"))))
+      (log/debug "Echo handler exiting"))))
 
 (defn server-accept-loop [^ServerSocket ss {:keys [socket-timeout state] :as _cfg} handler]
   (loop []
@@ -81,7 +83,7 @@
                               (close-silently! sock state)))
                           (catch Throwable t
                             (when-not (closed? state)
-                              (impl/atomic-println "Exception in handler:" (class t) (ex-message t))))
+                              (log/error "Exception in handler:" (class t) (ex-message t))))
                           (finally
                             (swap! state update :active-futures (fnil dec 0)))))]
         (add-to-set! state :futures fut))
@@ -133,4 +135,3 @@
                    cfg)
        :state state)
      handler)))
-
