@@ -131,3 +131,22 @@
           (t/is (= 1 (get recv {:res "ok-send", :payload "SGVsbG8gV29ybGQ="}))))
 
         (t/is (= {} @st))))))
+
+(t/deftest unknown-host-test
+  (let [cfg {:state          (atom {})
+             :allow-connect? (constantly true)
+             :session        "1"}]
+    (t/is (= {:res     "unknown-host"
+              :payload "unknown.example.com"}
+             (yasp/proxy! cfg
+                          {:op      "connect"
+                           :payload (u/pr-str-safe {:host "unknown.example.com" :port 12345})})))))
+
+(t/deftest connect-timeout-test
+  (let [cfg {:state          (atom {})
+             :allow-connect? (constantly true)
+             :session        "1"}]
+    (t/is (= {:res     "connect-timeout"}
+             (yasp/proxy! cfg
+                          {:op      "connect"
+                           :payload (u/pr-str-safe {:host "example.com" :port 12345})})))))

@@ -5,7 +5,7 @@
             [clojure.tools.logging :as log]
             [com.github.ivarref.yasp.utils :as u])
   (:import (java.io BufferedInputStream BufferedOutputStream InputStream)
-           (java.net InetSocketAddress Socket)))
+           (java.net InetSocketAddress Socket SocketTimeoutException UnknownHostException)))
 
 ; Private API, subject to change
 
@@ -23,18 +23,33 @@
             connect-timeout (get client-config :connect-timeout connect-timeout)
             chunk-size (get client-config :chunk-size chunk-size)]
         (.setSoTimeout sock socket-timeout)
-        (.connect sock (InetSocketAddress. ^String host ^Integer port) ^Integer connect-timeout)
-        (let [in (BufferedInputStream. (.getInputStream sock))
-              out (BufferedOutputStream. (.getOutputStream sock))]
-          (swap! state (fn [old-state]
-                         (assoc old-state session
-                                          {:socket      sock
-                                           :in          in
-                                           :out         out
-                                           :last-access now-ms
-                                           :chunk-size  chunk-size})))
-          {:res     "ok-connect"
-           :session session}))
+        (try
+          (.connect sock (InetSocketAddress. ^String host ^Integer port) ^Integer connect-timeout)
+          (let [in (BufferedInputStream. (.getInputStream sock))
+                out (BufferedOutputStream. (.getOutputStream sock))]
+            (swap! state (fn [old-state]
+                           (assoc old-state session
+                                            {:socket      sock
+                                             :in          in
+                                             :out         out
+                                             :last-access now-ms
+                                             :chunk-size  chunk-size})))
+            {:res     "ok-connect"
+             :session session})
+          (catch UnknownHostException uhe
+            (log/warn "Unknown host exception during connect:" (ex-message uhe))
+            {:res     "unknown-host"
+             :payload host})
+          (catch SocketTimeoutException ste
+            (log/warn "Socket timeout during connect:" (ex-message ste))
+            {:res "connect-timeout"})
+          (catch Throwable t
+            (log/error t "Unhandled exception in connect:" (ex-message t))
+            (log/error "Error message:" (ex-message t) "of type" (str (class t)))
+            {:res     "connect-error"
+             :payload (str (ex-message t)
+                           " of type "
+                           (str (class t)))})))
       {:res "disallow-connect"})))
 
 (defn expire-connections! [state now-ms]
@@ -115,6 +130,7 @@
     (catch Throwable t
       (log/error t "Unexpected error:" (ex-message t))
       (log/error "Root cause:" (ex-message (st/root-cause t)))
-      {:res "error"
+      {:res     "error"
        :payload (str "Message: " (ex-message t)
+                     " of type " (str (class t))
                      ". Root cause:" (ex-message (st/root-cause t)))})))
