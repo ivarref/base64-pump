@@ -27,13 +27,13 @@
             *print-namespace-maps* false]
     (pr-str x)))
 
-(defn pr-str-safe [what x]
+(defn pr-str-safe [x]
   (try
     (if (= x (edn/read-string (pr-str-inner x)))
       (pr-str-inner x)
-      (throw (ex-info (str "Could not read-string " what) {:input x})))
+      (throw (ex-info (str "Could not read-string") {:input x})))
     (catch Throwable t
-      (log/error t "could not read-string" what ":" (ex-message t))
+      (log/error t "could not read-string:" (ex-message t))
       (throw t))))
 
 (defn copy-bytes [in-bytes ^OutputStream os]
@@ -53,18 +53,14 @@
 (defn base64-str->bytes [^String base64-str]
   (.decode (Base64/getDecoder) base64-str))
 
-(defn parse-host-and-port [s]
-  (let [[host port] (str/split s #":")]
-    [host (Integer/valueOf port 10)]))
-
 (defn handle-connect [{:keys [state allow-connect? connect-timeout session now-ms socket-timeout]
                        :or   {now-ms          (System/currentTimeMillis)
                               session         (str (random-uuid))}}
                       {:keys [payload]}]
   (assert (some? allow-connect?) "Expected :allow-connect? to be present")
   (assert (string? payload) "Expected :payload to be a string")
-  (let [[host port :as host-and-port] (parse-host-and-port payload)]
-    (if (allow-connect? host-and-port)
+  (let [{:keys [host port] :as client-config} (edn/read-string payload)]
+    (if (allow-connect? (select-keys client-config [:host :port]))
       (let [sock (Socket.)]
         (.setSoTimeout sock socket-timeout)
         (.connect sock (InetSocketAddress. ^String host ^Integer port) ^Integer connect-timeout)

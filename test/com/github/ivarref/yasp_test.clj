@@ -23,7 +23,7 @@
                              :now-ms         0
                              :session        "1"}
                             {:op      "connect"
-                             :payload (str "localhost:" @ss)}))))))
+                             :payload (impl/pr-str-safe {:host "localhost" :port @ss})}))))))
 
 (t/deftest expire-connections
   (let [st (atom {})]
@@ -31,11 +31,11 @@
       (t/is (= {:res     "ok-connect"
                 :session "1"}
                (yasp/proxy! {:state          st
-                             :allow-connect? #{["localhost" @ss]}
+                             :allow-connect? #{{:host "localhost" :port @ss}}
                              :now-ms         0
                              :session        "1"}
                             {:op      "connect"
-                             :payload (str "localhost:" @ss)}))))
+                             :payload (impl/pr-str-safe {:host "localhost" :port @ss})}))))
     (t/is (map? (get @st "1")))
     (impl/expire-connections! st 50001)
     (t/is (map? (get @st "1")))
@@ -48,19 +48,19 @@
       (t/is (= {:res     "ok-connect"
                 :session "1"}
                (yasp/proxy! {:state          st
-                             :allow-connect? #{["localhost" @ss]}
+                             :allow-connect? #{{:host "localhost" :port @ss}}
                              :now-ms         0
                              :session        "1"}
                             {:op      "connect"
-                             :payload (str "localhost:" @ss)})))
+                             :payload (impl/pr-str-safe {:host "localhost" :port @ss})})))
       (t/is (map? (get @st "1")))
       (t/is (= {:res "ok-close"} (yasp/proxy! {:state          st
-                                               :allow-connect? #{["localhost" @ss]}
+                                               :allow-connect? #{{:host "localhost" :port @ss}}
                                                :now-ms         1}
                                               {:op      "close"
                                                :session "1"})))
       (t/is (= {:res "unknown-session"} (yasp/proxy! {:state          st
-                                                      :allow-connect? #{["localhost" @ss]}}
+                                                      :allow-connect? #{{:host "localhost" :port @ss}}}
                                                      {:op      "close"
                                                       :session "1"})))
       (t/is (= ::none (get @st "1" ::none))))))
@@ -82,13 +82,13 @@
   (let [st (atom {})]
     (with-open [ss (s/start-server! (atom {}) {} s/echo-handler)]
       (let [cfg {:state          st
-                 :allow-connect? #{["localhost" @ss]}
+                 :allow-connect? #{{:host "localhost" :port @ss}}
                  :now-ms         0
                  :session        "1"}]
         (t/is (= {:res     "ok-connect"
                   :session "1"}
                  (yasp/proxy! cfg {:op      "connect"
-                                   :payload (str "localhost:" @ss)})))
+                                   :payload (impl/pr-str-safe {:host "localhost" :port @ss})})))
         (t/is (map? (get @st "1")))
 
         (t/is (= {{:res "ok-send", :payload ""}                 10
@@ -113,13 +113,13 @@
   (let [st (atom {})]
     (with-open [ss (s/start-server! (atom {}) {} say-hello)]
       (let [cfg {:state          st
-                 :allow-connect? #{["localhost" @ss]}
+                 :allow-connect? #{{:host "localhost" :port @ss}}
                  :session        "1"}]
         (t/is (= {:res     "ok-connect"
                   :session "1"}
                  (yasp/proxy! cfg
                               {:op      "connect"
-                               :payload (str "localhost:" @ss)})))
+                               :payload (impl/pr-str-safe {:host "localhost" :port @ss})})))
         (let [recv (send-and-read!
                      cfg
                      {:op      "send"
