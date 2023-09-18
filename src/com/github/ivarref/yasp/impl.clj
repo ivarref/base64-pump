@@ -105,5 +105,8 @@
         (= "send" op)
         (handle-send cfg data)
 
+        (= "ping" op)
+        {:res "pong"}
+
         :else
         (throw (IllegalStateException. (str "Unexpected op: " (pr-str op))))))
