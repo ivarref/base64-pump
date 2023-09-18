@@ -80,7 +80,6 @@
 
 (t/deftest send-test
   (let [st (atom {})]
-
     (with-open [ss (s/start-server! (atom {}) {} s/echo-handler)]
       (let [cfg {:state          st
                  :allow-connect? #{["localhost" @ss]}
