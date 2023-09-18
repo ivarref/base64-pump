@@ -21,9 +21,6 @@
       (finally
         (remove-from-set state :open-sockets sock)))))
 
-#_(comment
-    (impl/read-max-bytes))
-
 (defn close! [state]
   (swap! state assoc :closed? true)
   (doseq [sock (get @state :open-sockets)]
@@ -55,6 +52,7 @@
         (if-let [chunk (impl/read-max-bytes in 1024)]
           (do
             (impl/copy-bytes chunk out)
+            (.flush out)
             (recur))
           (do
             (impl/atomic-println "Echo handler: EOF reached")))))
@@ -64,10 +62,11 @@
     (finally
       (impl/atomic-println "Echo handler exiting"))))
 
-(defn server-accept-loop [^ServerSocket ss {:keys [so-timeout state] :as _cfg} handler]
+(defn server-accept-loop [^ServerSocket ss {:keys [socket-timeout state] :as _cfg} handler]
   (loop []
     (when-let [^Socket sock (accept-inner ss state)]
-      (.setSoTimeout sock (or so-timeout 100))
+      (assert (pos-int? socket-timeout) ":socket-timeout must be a pos-int")
+      (.setSoTimeout sock socket-timeout)
       (add-to-set! state :open-sockets sock)
       (let [fut (future (try
                           (swap! state update :active-futures (fnil inc 0))
@@ -117,7 +116,8 @@
 
 (defn start-server!
   "
-  cfg: Configuration map.
+  cfg: Configuration map with the keys:
+  * `socket-timeout`: Socket timeout for read operations in milliseconds. Default: 100 ms.
 
   Arguments:
 
@@ -129,6 +129,8 @@
    (start-server! server-state cfg handler))
   (^AutoCloseable [state cfg handler]
    (start-server-impl!
-     (assoc cfg :state state)
+     (assoc (merge {:socket-timeout 100}
+                   cfg)
+       :state state)
      handler)))
 

@@ -1,7 +1,9 @@
 (ns com.github.ivarref.yasp.impl
-  (:require [clojure.java.io :as io]
-            [clojure.string :as str])
-  (:refer-clojure :exclude [future println])                ; no threads used :-)
+  (:refer-clojure :exclude [future println])
+  (:require [clojure.edn :as edn]
+            [clojure.java.io :as io]
+            [clojure.string :as str]
+            [clojure.tools.logging :as log])                ; no threads used :-)
   (:import (java.io BufferedInputStream BufferedOutputStream ByteArrayInputStream ByteArrayOutputStream Closeable InputStream OutputStream)
            (java.net InetSocketAddress Socket SocketTimeoutException)
            (java.util Base64)))
@@ -15,6 +17,24 @@
     (binding [*out* *err*]
       (apply clojure.core/println args)
       (flush))))
+
+(defn pr-str-inner [x]
+  (binding [*print-dup* false
+            *print-meta* false
+            *print-readably* true
+            *print-length* nil
+            *print-level* nil
+            *print-namespace-maps* false]
+    (pr-str x)))
+
+(defn pr-str-safe [what x]
+  (try
+    (if (= x (edn/read-string (pr-str-inner x)))
+      (pr-str-inner x)
+      (throw (ex-info (str "Could not read-string " what) {:input x})))
+    (catch Throwable t
+      (log/error t "could not read-string" what ":" (ex-message t))
+      (throw t))))
 
 (defn copy-bytes [in-bytes ^OutputStream os]
   (with-open [bais (ByteArrayInputStream. in-bytes)]
@@ -37,10 +57,8 @@
   (let [[host port] (str/split s #":")]
     [host (Integer/valueOf port 10)]))
 
-(defn handle-connect [{:keys [state allow-connect? connect-timeout session now-ms so-timeout]
-                       :or   {connect-timeout 3000
-                              so-timeout      100
-                              now-ms          (System/currentTimeMillis)
+(defn handle-connect [{:keys [state allow-connect? connect-timeout session now-ms socket-timeout]
+                       :or   {now-ms          (System/currentTimeMillis)
                               session         (str (random-uuid))}}
                       {:keys [payload]}]
   (assert (some? allow-connect?) "Expected :allow-connect? to be present")
@@ -48,7 +66,7 @@
   (let [[host port :as host-and-port] (parse-host-and-port payload)]
     (if (allow-connect? host-and-port)
       (let [sock (Socket.)]
-        (.setSoTimeout sock so-timeout)
+        (.setSoTimeout sock socket-timeout)
         (.connect sock (InetSocketAddress. ^String host ^Integer port) ^Integer connect-timeout)
         (let [in (BufferedInputStream. (.getInputStream sock))
               out (BufferedOutputStream. (.getOutputStream sock))]
@@ -80,20 +98,6 @@
             (close-silently! socket)
             (swap! state dissoc session-id)
             #_(println "closing" session-id)))))))
-
-(defn close! [state]
-  (when state
-    (let [s @state]
-      (doseq [[session-id {:keys [socket in out]}] s]
-        (atomic-println "closing" session-id)))))
-
-(comment
-  (defonce s (atom {}))
-  (handle-connect {:state          s
-                   :session-id     "123"
-                   :allow-connect? (constantly true)
-                   :now-ms         123 #_#{["localhost" 22]}}
-                  {:payload "example.com:443"}))
 
 (defn handle-close
   [{:keys [state]} {:keys [session]}]

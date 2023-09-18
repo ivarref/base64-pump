@@ -54,11 +54,13 @@
                             {:op      "connect"
                              :payload (str "localhost:" @ss)})))
       (t/is (map? (get @st "1")))
-      (t/is (= {:res "ok-close"} (yasp/proxy! {:state  st
-                                               :now-ms 1}
+      (t/is (= {:res "ok-close"} (yasp/proxy! {:state          st
+                                               :allow-connect? #{["localhost" @ss]}
+                                               :now-ms         1}
                                               {:op      "close"
                                                :session "1"})))
-      (t/is (= {:res "unknown-session"} (yasp/proxy! {:state st}
+      (t/is (= {:res "unknown-session"} (yasp/proxy! {:state          st
+                                                      :allow-connect? #{["localhost" @ss]}}
                                                      {:op      "close"
                                                       :session "1"})))
       (t/is (= ::none (get @st "1" ::none))))))
@@ -67,44 +69,43 @@
 
 (def hello-world-base64 (impl/bytes->base64-str hello-world-bytes))
 
+(defn send-and-read! [cfg data read-times]
+  (let [received (atom {})
+        add-recv! (fn [resp]
+                    (swap! received #(update %1 %2 (fnil inc 0)) resp))]
+    (add-recv! (yasp/proxy! cfg data))
+    (dotimes [_n read-times]
+      (add-recv! (yasp/proxy! cfg (assoc data :payload ""))))
+    @received))
+
 (t/deftest send-test
   (let [st (atom {})]
+
     (with-open [ss (s/start-server! (atom {}) {} s/echo-handler)]
-      (t/is (= {:res     "ok-connect"
-                :session "1"}
-               (yasp/proxy! {:state          st
-                             :allow-connect? #{["localhost" @ss]}
-                             :now-ms         0
-                             :session        "1"}
-                            {:op      "connect"
-                             :payload (str "localhost:" @ss)})))
-      (t/is (map? (get @st "1")))
-      (let [data (impl/bytes->base64-str hello-world-bytes)]
-        (t/is (= {:res     "ok-send"
-                  :payload data}
-                 (yasp/proxy! {:state  st
-                               :now-ms 1}
-                              {:op      "send"
-                               :session "1"
-                               :payload data})))
-        (t/is (= 1 (get-in @st ["1" :last-access])))
+      (let [cfg {:state          st
+                 :allow-connect? #{["localhost" @ss]}
+                 :now-ms         0
+                 :session        "1"}]
+        (t/is (= {:res     "ok-connect"
+                  :session "1"}
+                 (yasp/proxy! cfg {:op      "connect"
+                                   :payload (str "localhost:" @ss)})))
+        (t/is (map? (get @st "1")))
 
-        ; empty send is OK
-        (t/is (= {:res     "ok-send"
-                  :payload ""}
-                 (yasp/proxy! {:state  st
-                               :now-ms 2}
-                              {:op      "send"
-                               :session "1"
-                               :payload ""})))
-
-        (t/is (= 2 (get-in @st ["1" :last-access])))))))
+        (t/is (= {{:res "ok-send", :payload ""}                 10
+                  {:res "ok-send", :payload "SGVsbG8gV29ybGQ="} 1}
+                 (send-and-read! cfg
+                                 {:op      "send"
+                                  :session "1"
+                                  :payload hello-world-base64}
+                                 10)))))))
 
 (defn say-hello [{:keys [^Socket sock closed?]}]
   (try
     (with-open [in (ByteArrayInputStream. hello-world-bytes)
                 out (BufferedOutputStream. (.getOutputStream sock))]
-      (io/copy in out))
+      (io/copy in out)
+      (.flush out))
     (catch Throwable t
       (when-not @closed?
         (impl/atomic-println "error in say-hello:" (ex-message t))))))
@@ -112,26 +113,21 @@
 (t/deftest send-eof-test
   (let [st (atom {})]
     (with-open [ss (s/start-server! (atom {}) {} say-hello)]
-      (t/is (= {:res     "ok-connect"
-                :session "1"}
-               (yasp/proxy! {:state          st
-                             :allow-connect? #{["localhost" @ss]}
-                             :now-ms         0
-                             :session        "1"}
-                            {:op      "connect"
-                             :payload (str "localhost:" @ss)})))
-      (t/is (= {:res     "ok-send"
-                :payload hello-world-base64}
-               (yasp/proxy! {:state st
-                             :now-ms 1}
-                            {:op      "send"
-                             :session "1"
-                             :payload ""})))
+      (let [cfg {:state          st
+                 :allow-connect? #{["localhost" @ss]}
+                 :session        "1"}]
+        (t/is (= {:res     "ok-connect"
+                  :session "1"}
+                 (yasp/proxy! cfg
+                              {:op      "connect"
+                               :payload (str "localhost:" @ss)})))
+        (let [recv (send-and-read!
+                     cfg
+                     {:op      "send"
+                      :session "1"
+                      :payload ""}
+                     10)]
+          (t/is (= 1 (get recv {:res "eof"})))
+          (t/is (= 1 (get recv {:res "ok-send", :payload "SGVsbG8gV29ybGQ="}))))
 
-      (t/is (= {:res "eof"}
-               (yasp/proxy! {:state st
-                             :now-ms 2}
-                            {:op      "send"
-                             :session "1"
-                             :payload ""})))
-      (t/is (= {} @st)))))
+        (t/is (= {} @st))))))
