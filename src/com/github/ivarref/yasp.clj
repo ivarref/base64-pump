@@ -22,19 +22,26 @@
   This key is required.
 
   `:socket-timeout`: Socket timeout for read operations in milliseconds.
+  The client may override this setting when connecting.
    Default value is 100.
 
   `:connect-timeout`: Connect timeout in milliseconds.
+  The client may override this setting when connecting.
   Default value is 3000.
   "
-  [{:keys [allow-connect? socket-timeout connect-timeout] :as cfg} data]
+  [{:keys [allow-connect? socket-timeout connect-timeout]
+    :or   {socket-timeout  100
+           connect-timeout 3000}
+    :as   cfg}
+   data]
   (assert (map? data) "Expected data to be a map")
-  (assert (contains? data :op) "Expected data contain :op key")
+  (assert (contains? data :op) "Expected data to contain :op key")
   (assert (some? allow-connect?) "Expected :allow-connect? to be present")
   (impl/proxy-impl
-    (-> cfg
-        (assoc :state (or (:state cfg) default-state)
-               :now-ms (or (:now-ms cfg) (System/currentTimeMillis))
-               :socket-timeout (or socket-timeout 100)
-               :connect-timeout (or connect-timeout 3000)))
+    (assoc cfg
+      :state (get cfg :state default-state)
+      :now-ms (get cfg :now-ms (System/currentTimeMillis))
+      :session (get cfg :session (str (random-uuid)))
+      :socket-timeout socket-timeout
+      :connect-timeout connect-timeout)
     data))

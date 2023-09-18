@@ -11,9 +11,7 @@
 (comment
   (set! *warn-on-reflection* true))
 
-(defn handle-connect [{:keys [state allow-connect? connect-timeout session now-ms socket-timeout]
-                       :or   {now-ms  (System/currentTimeMillis)
-                              session (str (random-uuid))}}
+(defn handle-connect [{:keys [state allow-connect? connect-timeout session now-ms socket-timeout]}
                       {:keys [payload]}]
   (assert (some? allow-connect?) "Expected :allow-connect? to be present")
   (assert (string? payload) "Expected :payload to be a string")
@@ -65,8 +63,9 @@
     (let [{:keys [^InputStream in]} sess]
       (if-let [read-bytes (u/read-max-bytes in 1024)]
         (do
-          (when (pos-int? (count read-bytes))
-            (log/debug "Proxy: Received" (count read-bytes) "bytes from remote"))
+          (if (pos-int? (count read-bytes))
+            (log/debug "Proxy: Received" (count read-bytes) "bytes from remote")
+            (log/trace "Proxy: Received" (count read-bytes) "bytes from remote"))
           {:payload (u/bytes->base64-str read-bytes)})
         (do
           (handle-close cfg data)
@@ -81,13 +80,13 @@
     (let [{:keys [^BufferedOutputStream out]} sess
           bytes-to-send (u/base64-str->bytes payload)]
       (u/copy-bytes bytes-to-send out)
-      (when (pos-int? (count bytes-to-send))
-        (log/debug "Proxy: Wrote" (count bytes-to-send) "bytes to remote"))
+      (if (pos-int? (count bytes-to-send))
+        (log/debug "Proxy: Wrote" (count bytes-to-send) "bytes to remote")
+        (log/trace "Proxy: Wrote" (count bytes-to-send) "bytes to remote"))
       (swap! state assoc-in [session :last-access] now-ms)
       (merge
         {:res "ok-send"}
-        (handle-recv cfg opts))
-      #_{:res "ok-close"})
+        (handle-recv cfg opts)))
     {:res "unknown-session"}))
 
 (defn proxy-impl
