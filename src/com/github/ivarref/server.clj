@@ -83,7 +83,7 @@
                               (close-silently! sock state)))
                           (catch Throwable t
                             (if-not (closed? state)
-                              (log/error t "Exception in handler:" (class t) (ex-message t))
+                              (log/error t "Unexpected exception in handler:" (class t) (ex-message t))
                               (log/debug t "Exception in handler:" (class t) (ex-message t))))
                           (finally
                             (swap! state update :active-futures (fnil dec 0)))))]
