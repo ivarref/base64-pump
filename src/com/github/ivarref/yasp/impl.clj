@@ -1,12 +1,15 @@
 (ns com.github.ivarref.yasp.impl
   (:refer-clojure :exclude [future println])                ; no threads used :-)
   (:require [clojure.edn :as edn]
-            [com.github.ivarref.yasp.utils :as u]
-            [clojure.tools.logging :as log])
+            [clojure.tools.logging :as log]
+            [com.github.ivarref.yasp.utils :as u])
   (:import (java.io BufferedInputStream BufferedOutputStream InputStream)
            (java.net InetSocketAddress Socket)))
 
 ; Private API, subject to change
+
+(comment
+  (set! *warn-on-reflection* true))
 
 (defn handle-connect [{:keys [state allow-connect? connect-timeout session now-ms socket-timeout]
                        :or   {now-ms  (System/currentTimeMillis)
@@ -16,7 +19,9 @@
   (assert (string? payload) "Expected :payload to be a string")
   (let [{:keys [host port] :as client-config} (edn/read-string payload)]
     (if (allow-connect? (select-keys client-config [:host :port]))
-      (let [sock (Socket.)]
+      (let [sock (Socket.)
+            socket-timeout (get client-config :socket-timeout socket-timeout)
+            connect-timeout (get client-config :connect-timeout connect-timeout)]
         (.setSoTimeout sock socket-timeout)
         (.connect sock (InetSocketAddress. ^String host ^Integer port) ^Integer connect-timeout)
         (let [in (BufferedInputStream. (.getInputStream sock))
