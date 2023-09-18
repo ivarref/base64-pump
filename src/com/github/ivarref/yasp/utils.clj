@@ -57,7 +57,17 @@
         eof? (atom false)]
     (loop [c 0]
       (when-let [r (try
-                     (.read is)
+                     (let [available (.available is)]
+                       (cond (and (= 0 available) (not= c 0))
+                             (do
+                               (log/trace "Would block, return bytes so far")
+                               nil)
+
+                             :else
+                             (do
+                               (when (and (= 0 available) (= c 0))
+                                 (log/trace "Will (probably) block"))
+                               (.read is))))
                      (catch SocketTimeoutException ste
                        nil))]
         (if (= r -1)
@@ -75,7 +85,7 @@
 (comment
   (String. (read-max-bytes
              (ByteArrayInputStream. (.getBytes "Hello World"))
-             1024)))
+             5)))
 
 (defn close-silently! [^Closeable c]
   (when (and c (instance? Closeable c))
