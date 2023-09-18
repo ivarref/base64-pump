@@ -1,6 +1,7 @@
 (ns com.github.ivarref.yasp.impl
   (:refer-clojure :exclude [future println])                ; no threads used :-)
   (:require [clojure.edn :as edn]
+            [clojure.stacktrace :as st]
             [clojure.tools.logging :as log]
             [com.github.ivarref.yasp.utils :as u])
   (:import (java.io BufferedInputStream BufferedOutputStream InputStream)
@@ -93,20 +94,27 @@
 
 (defn proxy-impl
   [{:keys [state] :as cfg} {:keys [op] :as data}]
-  (assert (some? state))
-  (assert (string? op) "Expected :op to be a string")
-  (expire-connections! state (:now-ms cfg))
-  (cond (= "connect" op)
-        (handle-connect cfg data)
+  (try
+    (assert (some? state))
+    (assert (string? op) "Expected :op to be a string")
+    (expire-connections! state (:now-ms cfg))
+    (cond (= "connect" op)
+          (handle-connect cfg data)
 
-        (= "close" op)
-        (handle-close cfg data)
+          (= "close" op)
+          (handle-close cfg data)
 
-        (= "send" op)
-        (handle-send cfg data)
+          (= "send" op)
+          (handle-send cfg data)
 
-        (= "ping" op)
-        {:res "pong"}
+          (= "ping" op)
+          {:res "pong"}
 
-        :else
-        (throw (IllegalStateException. (str "Unexpected op: " (pr-str op))))))
+          :else
+          (throw (IllegalStateException. (str "Unexpected op: " (pr-str op)))))
+    (catch Throwable t
+      (log/error t "Unexpected error:" (ex-message t))
+      (log/error "Root cause:" (ex-message (st/root-cause t)))
+      {:res "error"
+       :payload (str "Message: " (ex-message t)
+                     ". Root cause:" (ex-message (st/root-cause t)))})))

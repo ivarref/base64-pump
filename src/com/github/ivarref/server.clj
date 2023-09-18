@@ -82,17 +82,18 @@
                             (finally
                               (close-silently! sock state)))
                           (catch Throwable t
-                            (when-not (closed? state)
-                              (log/error "Exception in handler:" (class t) (ex-message t))))
+                            (if-not (closed? state)
+                              (log/error t "Exception in handler:" (class t) (ex-message t))
+                              (log/debug t "Exception in handler:" (class t) (ex-message t))))
                           (finally
                             (swap! state update :active-futures (fnil dec 0)))))]
         (add-to-set! state :futures fut))
       (recur))))
 
 (defn start-server-impl!
-  [{:keys [state port] :as cfg} handler]
-  (let [ss (ServerSocket. (if port
-                            port
+  [{:keys [state local-port] :as cfg} handler]
+  (let [ss (ServerSocket. (if local-port
+                            local-port
                             0) 100 (InetAddress/getLoopbackAddress))
         ret (reify
               AutoCloseable
