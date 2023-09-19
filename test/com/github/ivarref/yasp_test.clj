@@ -37,9 +37,9 @@
                              :session        "1"}
                             {:op      "connect"
                              :payload (u/pr-str-safe {:host "localhost" :port @ss})}))))
-    (t/is (map? (get @st "1")))
+    (t/is (map? (get-in @st [:sessions "1"])))
     (impl/expire-connections! st 50001)
-    (t/is (map? (get @st "1")))
+    (t/is (map? (get-in @st [:sessions "1"])))
     (impl/expire-connections! st 600000)
     (t/is (= ::none (get @st "1" ::none)))))
 
@@ -54,7 +54,7 @@
                              :session        "1"}
                             {:op      "connect"
                              :payload (u/pr-str-safe {:host "localhost" :port @ss})})))
-      (t/is (map? (get @st "1")))
+      (t/is (map? (get-in @st [:sessions "1"])))
       (t/is (= {:res "ok-close"} (yasp/proxy! {:state          st
                                                :allow-connect? #{{:host "localhost" :port @ss}}
                                                :now-ms         1}
@@ -90,7 +90,7 @@
                   :session "1"}
                  (yasp/proxy! cfg {:op      "connect"
                                    :payload (u/pr-str-safe {:host "localhost" :port @ss})})))
-        (t/is (map? (get @st "1")))
+        (t/is (map? (get-in @st [:sessions "1"])))
 
         (t/is (= {{:res "ok-send", :payload ""}                 10
                   {:res "ok-send", :payload "SGVsbG8gV29ybGQ="} 1}
@@ -130,7 +130,7 @@
           (t/is (= 1 (get recv {:res "eof"})))
           (t/is (= 1 (get recv {:res "ok-send", :payload "SGVsbG8gV29ybGQ="}))))
 
-        (t/is (= {} @st))))))
+        (t/is (= {} (get @st :sessions)))))))
 
 (t/deftest unknown-host-test
   (let [cfg {:state          (atom {})

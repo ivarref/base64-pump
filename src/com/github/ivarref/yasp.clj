@@ -1,6 +1,6 @@
 (ns com.github.ivarref.yasp
   (:require [com.github.ivarref.yasp.impl :as impl])
-  (:refer-clojure :exclude [future println]))               ; no threads used :-)
+  (:refer-clojure :exclude [future]))                       ; no threads used :-)
 
 (defonce default-state (atom {}))
 
@@ -33,21 +33,26 @@
   The client may override this setting when connecting.
   Default value is 65536.
   "
-  [{:keys [allow-connect? socket-timeout connect-timeout chunk-size]
+  [{:keys [allow-connect? socket-timeout connect-timeout chunk-size tls-str]
     :or   {socket-timeout  100
            connect-timeout 3000
-           chunk-size 65536}
+           chunk-size      65536
+           tls-str         ::none}
     :as   cfg}
    data]
   (assert (map? data) "Expected data to be a map")
   (assert (contains? data :op) "Expected data to contain :op key")
   (assert (some? allow-connect?) "Expected :allow-connect? to be present")
   (impl/proxy-impl
-    (assoc cfg
-      :state (get cfg :state default-state)
-      :now-ms (get cfg :now-ms (System/currentTimeMillis))
-      :session (get cfg :session (str (random-uuid)))
-      :chunk-size (get cfg :chunk-size chunk-size)
-      :socket-timeout socket-timeout
-      :connect-timeout connect-timeout)
+    (-> cfg
+        (assoc
+          :state (get cfg :state default-state)
+          :now-ms (get cfg :now-ms (System/currentTimeMillis))
+          :session (get cfg :session (str (random-uuid)))
+          :chunk-size (get cfg :chunk-size chunk-size)
+          :socket-timeout socket-timeout
+          :connect-timeout connect-timeout)
+        (merge
+          (when (not= tls-str ::none)
+            {:tls-str tls-str})))
     data))
