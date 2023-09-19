@@ -1,7 +1,8 @@
 (ns com.github.ivarref.server
   (:refer-clojure :exclude [println])
   (:require [clojure.tools.logging :as log]
-            [com.github.ivarref.yasp.utils :as u])
+            [com.github.ivarref.yasp.utils :as u]
+            [com.github.ivarref.yasp.tls :as tls])
   (:import (clojure.lang IDeref)
            (java.io BufferedInputStream BufferedOutputStream Closeable)
            (java.lang AutoCloseable)
@@ -91,10 +92,12 @@
       (recur))))
 
 (defn start-server-impl!
-  [{:keys [state local-port] :as cfg} handler]
-  (let [ss (ServerSocket. (if local-port
-                            local-port
-                            0) 100 (InetAddress/getLoopbackAddress))
+  [{:keys [state tls-context tls-port local-port] :as cfg} handler]
+  (let [ss (if tls-context
+             (tls/server-socket tls-context "127.0.0.1" (or tls-port 0))
+             (ServerSocket. (if local-port
+                              local-port
+                              0) 100 (InetAddress/getLoopbackAddress)))
         ret (reify
               AutoCloseable
               (close [_]

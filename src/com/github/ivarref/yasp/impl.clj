@@ -1,9 +1,11 @@
 (ns com.github.ivarref.yasp.impl
-  (:refer-clojure :exclude [future])                ; no threads used :-)
+  (:refer-clojure :exclude [future])                        ; no threads used :-)
   (:require [clojure.edn :as edn]
             [clojure.stacktrace :as st]
             [clojure.tools.logging :as log]
-            [com.github.ivarref.yasp.utils :as u])
+            [com.github.ivarref.yasp.utils :as u]
+            [com.github.ivarref.yasp.tls :as tls]
+            [com.github.ivarref.server :as server])
   (:import (java.io BufferedInputStream BufferedOutputStream InputStream)
            (java.net InetSocketAddress Socket SocketTimeoutException UnknownHostException)))
 
@@ -12,21 +14,54 @@
 (comment
   (set! *warn-on-reflection* true))
 
-(defn handle-connect [{:keys [state allow-connect? connect-timeout session now-ms socket-timeout chunk-size tls-str]}
+(defn bootstrap-tls-proxy! [{:keys [tls-str connect-timeout socket-timeout] :as cfg} {:keys [host port]}]
+  (log/info "TLS proxy starting")
+  (let [proxy-state (atom {})
+        tls-proxy (server/start-server!
+                    proxy-state
+                    (assoc cfg :tls-context (tls/ssl-context-or-throw tls-str nil))
+                    (fn [{:keys [^Socket sock closed?]}]
+                      (let [remote (Socket.)]
+                        (.setSoTimeout remote socket-timeout)
+                        (when (try
+                                (log/info "TLS proxy received connection")
+                                (.connect remote (InetSocketAddress. ^String host ^Integer port) ^Integer connect-timeout)
+                                true
+                                (catch Throwable t
+                                  (log/warn t "TLS proxy could not connect to remote host" host port)
+                                  nil))
+                          (log/info "OK connect")))
+                      (println "got new TLS connection")))]
+    (log/info "TLS proxy running on port" @tls-proxy)
+    {:state proxy-state
+     :proxy tls-proxy}))
+
+
+(defn handle-connect [{:keys [state allow-connect? connect-timeout session now-ms socket-timeout chunk-size tls-str]
+                       :as   cfg}
                       {:keys [payload]}]
   (assert (some? allow-connect?) "Expected :allow-connect? to be present")
   (assert (string? payload) "Expected :payload to be a string")
   (let [{:keys [host port] :as client-config} (edn/read-string payload)]
     (if (allow-connect? (select-keys client-config [:host :port]))
       (do
-        (locking state
-          (when (and (some? tls-str)
-                     (= ::none (get-in @state [:tls-proxy host port] ::none)))
-            (log/info "Bootrapping TLS proxy")))
+        (when (some? tls-str)
+          (locking state
+            (if (not= ::none (get-in @state [:tls-proxy host port] ::none))
+              (log/info "TLS proxy bootstrapped, doing nothing")
+              (let [new-proxy (bootstrap-tls-proxy! cfg client-config)]
+                (swap! state assoc-in [:tls-proxy host port] new-proxy)))))
         (let [sock (Socket.)
               socket-timeout (get client-config :socket-timeout socket-timeout)
               connect-timeout (get client-config :connect-timeout connect-timeout)
-              chunk-size (get client-config :chunk-size chunk-size)]
+              chunk-size (get client-config :chunk-size chunk-size)
+              old-port port
+              port (if (some? tls-str)
+                     (deref (get-in @state [:tls-proxy host port :proxy]))
+                     port)
+              host (if (some? tls-str) "127.0.0.1" host)]
+          (when (not= old-port port)
+            (log/info "Overriding port from" old-port "to" port))
           (.setSoTimeout sock socket-timeout)
           (try
             (.connect sock (InetSocketAddress. ^String host ^Integer port) ^Integer connect-timeout)
