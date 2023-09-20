@@ -1,4 +1,5 @@
 (ns com.github.ivarref.yasp.impl
+  (:refer-clojure :exclude [future])
   (:require [clojure.edn :as edn]
             [clojure.stacktrace :as st]
             [clojure.tools.logging :as log]

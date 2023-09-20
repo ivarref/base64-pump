@@ -15,6 +15,8 @@
 
 (set! *warn-on-reflection* true)
 
+(t/use-fixtures :each u/with-fut)
+
 #_(clj-commons.pretty.repl/install-pretty-exceptions)
 
 (comment

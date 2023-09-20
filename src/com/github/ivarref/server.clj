@@ -1,5 +1,5 @@
 (ns com.github.ivarref.server
-  (:refer-clojure :exclude [println])
+  (:refer-clojure :exclude [println future])
   (:require [clojure.tools.logging :as log]
             [com.github.ivarref.yasp.tls :as tls]
             [com.github.ivarref.yasp.utils :as u])
@@ -83,23 +83,23 @@
           (assert (pos-int? socket-timeout) ":socket-timeout must be a pos-int")
           (.setSoTimeout sock socket-timeout)
           (add-to-set! state :open-sockets sock)
-          (let [fut (future (try
-                              (swap! state update :active-futures (fnil inc 0))
-                              (try
-                                (handler {:sock    sock
-                                          :state   state
-                                          :closed? (reify
-                                                     IDeref,
-                                                     (deref [_]
-                                                       (closed? state)))})
-                                (finally
-                                  (close-silently! sock state)))
-                              (catch Throwable t
-                                (if-not (or (.isClosed sock) (closed? state))
-                                  (log/error "Unexpected exception in handler:" (class t) (ex-message t))
-                                  (log/debug t "Exception in handler:" (class t) (ex-message t))))
-                              (finally
-                                (swap! state update :active-futures (fnil dec 0)))))]
+          (let [fut (u/fut (try
+                             (swap! state update :active-futures (fnil inc 0))
+                             (try
+                               (handler {:sock    sock
+                                         :state   state
+                                         :closed? (reify
+                                                    IDeref,
+                                                    (deref [_]
+                                                      (closed? state)))})
+                               (finally
+                                 (close-silently! sock state)))
+                             (catch Throwable t
+                               (if-not (or (.isClosed sock) (closed? state))
+                                 (log/error "Unexpected exception in handler:" (class t) (ex-message t))
+                                 (log/debug t "Exception in handler:" (class t) (ex-message t))))
+                             (finally
+                               (swap! state update :active-futures (fnil dec 0)))))]
             (add-to-set! state :futures fut)))
         (recur)))))
 
@@ -121,7 +121,7 @@
               IDeref
               (deref [_]
                 (.getLocalPort ss)))
-        fut (future
+        fut (u/fut
               (try
                 (swap! state update :active-futures (fnil inc 0))
                 (server-accept-loop
@@ -186,7 +186,7 @@
                 (log/warn t "TLS proxy" my-id "could not connect to remote host" host port)
                 nil))
         (log/debug "TLS proxy" my-id "OK connected to" host port)
-        (let [fut (future
+        (let [fut (u/fut
                     (try
                       (swap! state update :active-futures (fnil inc 0))
                       (try

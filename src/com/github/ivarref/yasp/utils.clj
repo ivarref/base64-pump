@@ -1,6 +1,7 @@
 (ns com.github.ivarref.yasp.utils
   (:require [clojure.edn :as edn]
             [clojure.java.io :as io]
+            [clojure.string :as str]
             [clojure.tools.logging :as log])
   (:import (java.io ByteArrayInputStream ByteArrayOutputStream Closeable InputStream OutputStream)
            (java.net SocketTimeoutException)
@@ -94,3 +95,53 @@
       (catch Throwable t
         nil))))
 
+(def ^:dynamic *active-futures* nil)
+(def ^:dynamic *max-active-futures* nil)
+(def ^:dynamic *fut-map* nil)
+
+(defmacro fut
+  [& body]
+  (let [info (assoc (meta &form) :file *file*)]
+    `(let [info# ~info
+           body-fn# (bound-fn []
+                      (try
+                        (when (some? *active-futures*)
+                          (swap! *fut-map* update info# (fnil inc 0))
+                          (let [new-cnt# (swap! *active-futures* inc)]
+                            (swap! *max-active-futures* (fn [old#] (max old# new-cnt#)))))
+                        ~@body
+                        (finally
+                          (when (some? *active-futures*)
+                            (swap! *fut-map* update info# dec)
+                            (swap! *active-futures* dec)))))
+           f# (future (body-fn#))]
+       f#)))
+
+(defn report []
+  (let [v @*active-futures*]
+    (if (not= 0 v)
+      (do
+        (doseq [[{:keys [line _column file]} cnt] @*fut-map*]
+          (when (not= cnt 0)
+            (log/error "Offending future" (str "(" (last (str/split file #"/")) ":" line ")"))))
+        (throw (ex-info (str "Still " v " active future(s)") {:count v})))
+      (log/debug "All futures exited. Max was:" @*max-active-futures*))))
+
+(defn with-fut [f]
+  (let [cnt (atom 0)
+        max-count (atom 0)
+        fut-map (atom {})]
+    (binding [*active-futures* cnt
+              *max-active-futures* max-count
+              *fut-map* fut-map]
+      (f)
+      (report))))
+
+(comment
+  (let [m (atom {})]
+    (binding [*active-futures* (atom 0)
+              *max-active-futures* (atom 0)
+              *fut-map* m]
+      (fut (Thread/sleep 1000))
+      (Thread/sleep 10))
+    @m))
