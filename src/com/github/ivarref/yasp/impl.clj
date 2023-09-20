@@ -1,12 +1,11 @@
 (ns com.github.ivarref.yasp.impl
-  (:refer-clojure :exclude [future])                        ; no threads used :-)
   (:require [clojure.edn :as edn]
             [clojure.stacktrace :as st]
             [clojure.tools.logging :as log]
             [com.github.ivarref.yasp.utils :as u]
             [com.github.ivarref.yasp.tls :as tls]
             [com.github.ivarref.server :as server])
-  (:import (java.io BufferedInputStream BufferedOutputStream InputStream)
+  (:import (java.io BufferedInputStream BufferedOutputStream InputStream OutputStream)
            (java.net InetSocketAddress Socket SocketTimeoutException UnknownHostException)))
 
 ; Private API, subject to change
@@ -16,6 +15,20 @@
 
 (defonce id (atom 0))
 
+(defn pump [^InputStream is ^OutputStream os]
+  (if-let [chunk (u/read-max-bytes is 64000)]
+    (do
+      (u/write-bytes chunk os)
+      true)
+    false))
+
+(defn pump-socks [^Socket src ^Socket dst]
+  (with-open [in (BufferedInputStream. (.getInputStream src))
+              out (BufferedOutputStream. (.getOutputStream dst))]
+    (loop []
+      (when (pump in out)
+        (recur)))))
+
 (defn bootstrap-tls-proxy! [{:keys [tls-str connect-timeout socket-timeout] :as cfg} {:keys [host port]}]
   (let [my-id (swap! id inc)
         _ (log/info "TLS proxy" my-id "starting")
@@ -24,16 +37,22 @@
                     proxy-state
                     (assoc cfg :tls-context (tls/ssl-context-or-throw tls-str nil))
                     (fn [{:keys [^Socket sock closed?]}]
-                      (let [remote (Socket.)]
-                        (.setSoTimeout remote socket-timeout)
-                        (when (try
-                                (log/info "TLS proxy" my-id "received connection")
-                                (.connect remote (InetSocketAddress. ^String host ^Integer port) ^Integer connect-timeout)
-                                true
-                                (catch Throwable t
-                                  (log/warn t "TLS proxy" my-id "could not connect to remote host" host port)
-                                  nil))
-                          (log/info "TLS proxy" my-id "OK connect")))))]
+                      (try
+                        (let [remote (Socket.)]
+                          (.setSoTimeout remote socket-timeout)
+                          (when (try
+                                  (log/info "TLS proxy" my-id "received connection")
+                                  (.connect remote (InetSocketAddress. ^String host ^Integer port) ^Integer connect-timeout)
+                                  true
+                                  (catch Throwable t
+                                    (log/warn t "TLS proxy" my-id "could not connect to remote host" host port)
+                                    nil))
+                            (log/info "TLS proxy" my-id "OK connected to" host port)
+                            (let [fut (future (pump-socks sock remote))]
+                              (pump-socks remote sock)
+                              @fut)))
+                        (finally
+                          (log/info "TLS proxy handler exiting")))))]
     (log/info "TLS proxy" my-id "running on port" @tls-proxy ", forwarding to" host port)
     {:state    proxy-state
      :proxy    tls-proxy
@@ -147,7 +166,7 @@
   (if-let [sess (get-in @state [:sessions session])]
     (let [{:keys [^BufferedOutputStream out]} sess
           bytes-to-send (u/base64-str->bytes payload)]
-      (u/copy-bytes bytes-to-send out)
+      (u/write-bytes bytes-to-send out)
       (if (pos-int? (count bytes-to-send))
         (log/debug "Proxy: Wrote" (count bytes-to-send) "bytes to remote")
         (log/trace "Proxy: Wrote" (count bytes-to-send) "bytes to remote"))
@@ -158,7 +177,7 @@
     {:res "unknown-session"}))
 
 (defn proxy-impl
-  [{:keys [state] :as cfg} {:keys [op] :as data}]
+  [{:keys [state] :as cfg} {:keys [op session] :as data}]
   (try
     (assert (some? state))
     (assert (string? op) "Expected :op to be a string")
@@ -178,7 +197,7 @@
           :else
           (throw (IllegalStateException. (str "Unexpected op: " (pr-str op)))))
     (catch Throwable t
-      (log/error t "Unexpected error:" (ex-message t))
+      (log/error "Unexpected error:" (ex-message t))
       (log/error "Root cause:" (ex-message (st/root-cause t)))
       {:res     "error"
        :payload (str "Message: " (ex-message t)

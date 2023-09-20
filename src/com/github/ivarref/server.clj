@@ -6,7 +6,8 @@
   (:import (clojure.lang IDeref)
            (java.io BufferedInputStream BufferedOutputStream Closeable)
            (java.lang AutoCloseable)
-           (java.net InetAddress ServerSocket Socket)))
+           (java.net InetAddress ServerSocket Socket)
+           (javax.net.ssl SSLServerSocket)))
 
 (defn add-to-set! [state key what]
   (swap! state (fn [old-state] (update old-state key (fnil conj #{}) what))))
@@ -40,10 +41,12 @@
 
 (defn accept-inner [^ServerSocket ss state]
   (try
-    (.accept ss)
+    (if (instance? SSLServerSocket ss)
+      (tls/accept ss)
+      (.accept ss))
     (catch Throwable t
       (if-not (closed? state)
-        (log/error t "Error in accept-inner on port" (.getLocalPort ss) ":" (ex-message t))
+        (log/warn "Error in accept-inner on port" (.getLocalPort ss) ":" (ex-message t))
         (log/info "Error in accept-inner on port" (.getLocalPort ss) ":" (ex-message t)))
       nil)))
 
@@ -54,7 +57,7 @@
       (loop []
         (if-let [chunk (u/read-max-bytes in 1024)]
           (do
-            (u/copy-bytes chunk out)
+            (u/write-bytes chunk out)
             (recur))
           (do
             (log/debug "Echo handler: EOF reached")))))
@@ -84,7 +87,7 @@
                               (close-silently! sock state)))
                           (catch Throwable t
                             (if-not (closed? state)
-                              (log/error t "Unexpected exception in handler:" (class t) (ex-message t))
+                              (log/error "Unexpected exception in handler:" (class t) (ex-message t))
                               (log/debug t "Exception in handler:" (class t) (ex-message t))))
                           (finally
                             (swap! state update :active-futures (fnil dec 0)))))]

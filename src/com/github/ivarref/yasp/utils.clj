@@ -34,7 +34,7 @@
       (log/error t "could not read-string:" (ex-message t))
       (throw t))))
 
-(defn copy-bytes [in-bytes ^OutputStream os]
+(defn write-bytes [in-bytes ^OutputStream os]
   (with-open [bais (ByteArrayInputStream. in-bytes)]
     (io/copy bais os)
     (.flush os)))
