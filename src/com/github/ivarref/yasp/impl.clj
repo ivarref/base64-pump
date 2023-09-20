@@ -36,7 +36,7 @@
                      port)
               host (if (some? tls-str) "127.0.0.1" host)]
           (when (not= old-port port)
-            (log/info "Overriding port from" old-port "to" port))
+            (log/debug "Overriding port from" old-port "to" port))
           (.setSoTimeout sock socket-timeout)
           (try
             (.connect sock (InetSocketAddress. ^String host ^Integer port) ^Integer connect-timeout)
@@ -89,7 +89,7 @@
     (let [s @state]
       (doseq [[host v] (get s :tls-proxy)]
         (doseq [[port tls-proxy] v]
-          (log/info "Shutting down TLS proxy forwarding to" host port)
+          (log/debug "Shutting down TLS proxy forwarding to" host port)
           (server/close! (get tls-proxy :state))
           (swap! state (fn [old-state] (assoc-in old-state [:tls-proxy host port]
                                                  {:running?    false

@@ -106,7 +106,7 @@
         ret (reify
               AutoCloseable
               (close [_]
-                (log/info "Closing proxy running at port" (.getLocalPort ss))
+                (log/debug "Closing proxy running at port" (.getLocalPort ss))
                 (close! state))
               IDeref
               (deref [_]
@@ -209,7 +209,7 @@
                     (assoc cfg :tls-context (tls/ssl-context-or-throw tls-str nil))
                     (fn [{:keys [^Socket sock closed?]}]
                       (tls-handler my-id state sock host port connect-timeout socket-timeout)))]
-    (log/info "TLS proxy" my-id "running on port" @tls-proxy ", forwarding to" host port)
+    (log/debug "TLS proxy" my-id "running on port" @tls-proxy ", forwarding to" host port)
     {:state    state
      :proxy    tls-proxy
      :running? true}))
