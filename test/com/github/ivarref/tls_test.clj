@@ -1,6 +1,5 @@
 (ns com.github.ivarref.tls-test
   (:require [clj-commons.pretty.repl]
-            [clojure.stacktrace :as st]
             [clojure.string :as str]
             [clojure.test :as t]
             [clojure.tools.logging :as log]
