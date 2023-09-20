@@ -2,61 +2,15 @@
   (:require [clojure.edn :as edn]
             [clojure.stacktrace :as st]
             [clojure.tools.logging :as log]
-            [com.github.ivarref.yasp.utils :as u]
-            [com.github.ivarref.yasp.tls :as tls]
-            [com.github.ivarref.server :as server])
-  (:import (java.io BufferedInputStream BufferedOutputStream InputStream OutputStream)
+            [com.github.ivarref.server :as server]
+            [com.github.ivarref.yasp.utils :as u])
+  (:import (java.io BufferedInputStream BufferedOutputStream InputStream)
            (java.net InetSocketAddress Socket SocketTimeoutException UnknownHostException)))
 
 ; Private API, subject to change
 
 (comment
   (set! *warn-on-reflection* true))
-
-(defonce id (atom 0))
-
-(defn pump [^InputStream is ^OutputStream os]
-  (if-let [chunk (u/read-max-bytes is 64000)]
-    (do
-      (u/write-bytes chunk os)
-      true)
-    false))
-
-(defn pump-socks [^Socket src ^Socket dst]
-  (with-open [in (BufferedInputStream. (.getInputStream src))
-              out (BufferedOutputStream. (.getOutputStream dst))]
-    (loop []
-      (when (pump in out)
-        (recur)))))
-
-(defn bootstrap-tls-proxy! [{:keys [tls-str connect-timeout socket-timeout] :as cfg} {:keys [host port]}]
-  (let [my-id (swap! id inc)
-        _ (log/info "TLS proxy" my-id "starting")
-        proxy-state (atom {})
-        tls-proxy (server/start-server!
-                    proxy-state
-                    (assoc cfg :tls-context (tls/ssl-context-or-throw tls-str nil))
-                    (fn [{:keys [^Socket sock closed?]}]
-                      (try
-                        (let [remote (Socket.)]
-                          (.setSoTimeout remote socket-timeout)
-                          (when (try
-                                  (log/info "TLS proxy" my-id "received connection")
-                                  (.connect remote (InetSocketAddress. ^String host ^Integer port) ^Integer connect-timeout)
-                                  true
-                                  (catch Throwable t
-                                    (log/warn t "TLS proxy" my-id "could not connect to remote host" host port)
-                                    nil))
-                            (log/info "TLS proxy" my-id "OK connected to" host port)
-                            (let [fut (future (pump-socks sock remote))]
-                              (pump-socks remote sock)
-                              @fut)))
-                        (finally
-                          (log/info "TLS proxy handler exiting")))))]
-    (log/info "TLS proxy" my-id "running on port" @tls-proxy ", forwarding to" host port)
-    {:state    proxy-state
-     :proxy    tls-proxy
-     :running? true}))
 
 (defn handle-connect [{:keys [state allow-connect? connect-timeout session now-ms socket-timeout chunk-size tls-str]
                        :as   cfg}
@@ -69,7 +23,7 @@
         (when (some? tls-str)
           (locking state
             (if (false? (get-in @state [:tls-proxy host port :running?] false))
-              (let [new-proxy (bootstrap-tls-proxy! cfg client-config)]
+              (let [new-proxy (server/bootstrap-tls-proxy! cfg client-config)]
                 (swap! state assoc-in [:tls-proxy host port] new-proxy))
               (log/info "TLS proxy bootstrapped, doing nothing"))))
         (let [sock (Socket.)
@@ -135,9 +89,11 @@
     (let [s @state]
       (doseq [[host v] (get s :tls-proxy)]
         (doseq [[port tls-proxy] v]
+          (log/info "Shutting down TLS proxy forwarding to" host port)
           (server/close! (get tls-proxy :state))
-          (swap! state (fn [old-state] (assoc-in old-state [:tls-proxy host port :running?] false)))
-          (log/info "Shutting down proxy at" host port))))))
+          (swap! state (fn [old-state] (assoc-in old-state [:tls-proxy host port]
+                                                 {:running?    false
+                                                  :final-state @(get tls-proxy :state)}))))))))
 
 (defn handle-close
   [{:keys [state]} {:keys [session]}]

@@ -4,9 +4,9 @@
             [com.github.ivarref.yasp.utils :as u]
             [com.github.ivarref.yasp.tls :as tls])
   (:import (clojure.lang IDeref)
-           (java.io BufferedInputStream BufferedOutputStream Closeable)
+           (java.io BufferedInputStream BufferedOutputStream Closeable InputStream OutputStream)
            (java.lang AutoCloseable)
-           (java.net InetAddress ServerSocket Socket)
+           (java.net InetAddress InetSocketAddress ServerSocket Socket)
            (javax.net.ssl SSLServerSocket)))
 
 (defn add-to-set! [state key what]
@@ -47,7 +47,7 @@
     (catch Throwable t
       (if-not (closed? state)
         (log/warn "Error in accept-inner on port" (.getLocalPort ss) ":" (ex-message t))
-        (log/info "Error in accept-inner on port" (.getLocalPort ss) ":" (ex-message t)))
+        (log/debug "Error in accept-inner on port" (.getLocalPort ss) ":" (ex-message t)))
       nil)))
 
 (defn echo-handler [{:keys [^Socket sock closed?]}]
@@ -119,7 +119,7 @@
                   cfg
                   handler)
                 (finally
-                  (log/info "Accept loop exiting for port" (.getLocalPort ss))
+                  (log/debug "Accept loop exiting for port" (.getLocalPort ss))
                   (swap! state update :active-futures (fnil dec 0)))))]
     (add-to-set! state :open-sockets ss)
     (add-to-set! state :futures fut)
@@ -146,3 +146,56 @@
                    cfg)
        :state state)
      handler)))
+
+(defonce id (atom 0))
+
+(defn pump [^InputStream is ^OutputStream os]
+  (if-let [chunk (u/read-max-bytes is 64000)]
+    (do
+      (u/write-bytes chunk os)
+      true)
+    false))
+
+(defn pump-socks [^Socket src ^Socket dst]
+  (with-open [in (BufferedInputStream. (.getInputStream src))
+              out (BufferedOutputStream. (.getOutputStream dst))]
+    (loop []
+      (when (pump in out)
+        (recur)))))
+
+(defn bootstrap-tls-proxy! [{:keys [tls-str connect-timeout socket-timeout] :as cfg} {:keys [host port]}]
+  (let [my-id (swap! id inc)
+        state (atom {})
+        tls-proxy (start-server!
+                    state
+                    (assoc cfg :tls-context (tls/ssl-context-or-throw tls-str nil))
+                    (fn [{:keys [^Socket sock closed?]}]
+                      (try
+                        (let [remote (Socket.)]
+                          (.setSoTimeout remote socket-timeout)
+                          (when (try
+                                  (log/info "TLS proxy" my-id "received connection")
+                                  (.connect remote (InetSocketAddress. ^String host ^Integer port) ^Integer connect-timeout)
+                                  (add-to-set! state :open-sockets remote)
+                                  true
+                                  (catch Throwable t
+                                    (log/warn t "TLS proxy" my-id "could not connect to remote host" host port)
+                                    nil))
+                            (log/info "TLS proxy" my-id "OK connected to" host port)
+                            (let [fut (future
+                                        (try
+                                          (swap! state update :active-futures (fnil inc 0))
+                                          (pump-socks sock remote)
+                                          (catch Throwable t
+                                            (log/error "Unexpected exception in pump" (ex-message t)))
+                                          (finally
+                                            (swap! state update :active-futures (fnil dec 0)))))]
+                              (add-to-set! state :futures fut)
+                              (pump-socks remote sock)
+                              @fut)))
+                        (finally
+                          (log/debug "TLS proxy handler exiting")))))]
+    (log/info "TLS proxy" my-id "running on port" @tls-proxy ", forwarding to" host port)
+    {:state    state
+     :proxy    tls-proxy
+     :running? true}))

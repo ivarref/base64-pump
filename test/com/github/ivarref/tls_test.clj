@@ -49,7 +49,6 @@
         (recur)))))
 
 (t/deftest tls-hello
-  (clear)
   (let [st (atom {})
         [server-keys client-keys] (gen-key-pair)
         proxy-cfg {:state          st
@@ -62,24 +61,22 @@
       (with-open [echo-server (s/start-server! (atom {}) {:local-port 9999} s/echo-handler)
                   tls-client (s/start-server! (atom {}) {:local-port 9876} (partial tls-pump proxy-cfg))]
         (let [tls-context (tls/ssl-context-or-throw client-keys nil)
-              v (yasp/proxy! proxy-cfg {:op      "connect"
+              _ (yasp/proxy! proxy-cfg {:op      "connect"
                                         :payload (u/pr-str-safe {:host "127.0.0.1" :port @echo-server})})]
           (with-open [sock (tls/socket tls-context "localhost" 9876 3000)]
             (.setSoTimeout sock 3000)
-            (log/info "Start connect TLS socket")
-            (try
-              (with-open [in (BufferedReader. (InputStreamReader. (.getInputStream sock) StandardCharsets/UTF_8))
-                          out (PrintWriter. (BufferedOutputStream. (.getOutputStream sock)) true StandardCharsets/UTF_8)]
-                (.println out "Hello World!")
-                (t/is (= "Hello World!" (.readLine in)))
+            ;(log/info "Start connect TLS socket")
+            (with-open [in (BufferedReader. (InputStreamReader. (.getInputStream sock) StandardCharsets/UTF_8))
+                        out (PrintWriter. (BufferedOutputStream. (.getOutputStream sock)) true StandardCharsets/UTF_8)]
+              (.println out "Hello World!")
+              (t/is (= "Hello World!" (.readLine in)))
 
-                (.println out "Hallo, 你好世界")
-                (t/is (= "Hallo, 你好世界" (.readLine in))))))))
+              (.println out "Hallo, 你好世界")
+              (t/is (= "Hallo, 你好世界" (.readLine in)))))))
         #_(reset! old-state @st)
         #_(t/is (= {:res "disallow-connect"}))
       (finally
         (break)
-        (log/info "Start shutdown...")
         (yasp/close! st)
         (reset! old-state @st)))))
 ;(impl/expire-connections! st (System/currentTimeMillis))
