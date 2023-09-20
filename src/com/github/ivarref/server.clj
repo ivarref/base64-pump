@@ -185,16 +185,27 @@
                             (let [fut (future
                                         (try
                                           (swap! state update :active-futures (fnil inc 0))
-                                          (pump-socks sock remote)
+                                          (try
+                                            (pump-socks sock remote)
+                                            (catch Throwable t
+                                              (if (or (.isClosed sock) (.isClosed remote))
+                                                (log/info "TLS pump2: Src or dst closed connection. Got exception:" (ex-message t))
+                                                (log/error t "Unexpected error in TLS pump2:" (ex-message t)))))
                                           (catch Throwable t
-                                            (log/error "Unexpected exception in pump" (ex-message t)))
+                                            (log/error "Unexpected exception in TLS pump2:" (ex-message t)))
                                           (finally
+                                            (log/info "TLS pump2 exiting")
                                             (swap! state update :active-futures (fnil dec 0)))))]
                               (add-to-set! state :futures fut)
-                              (pump-socks remote sock)
+                              (try
+                                (pump-socks remote sock)
+                                (catch Throwable t
+                                  (if (or (.isClosed sock) (.isClosed remote))
+                                    (log/info "TLS pump1: Src or dst closed connection. Got exception:" (ex-message t))
+                                    (log/error t "Unexpected error in TLS pump1:" (ex-message t)))))
                               @fut)))
                         (finally
-                          (log/debug "TLS proxy handler exiting")))))]
+                          (log/info "TLS pump1 exiting")))))]
     (log/info "TLS proxy" my-id "running on port" @tls-proxy ", forwarding to" host port)
     {:state    state
      :proxy    tls-proxy

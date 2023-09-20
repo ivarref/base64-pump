@@ -64,8 +64,7 @@
               _ (yasp/proxy! proxy-cfg {:op      "connect"
                                         :payload (u/pr-str-safe {:host "127.0.0.1" :port @echo-server})})]
           (with-open [sock (tls/socket tls-context "localhost" 9876 3000)]
-            (.setSoTimeout sock 3000)
-            ;(log/info "Start connect TLS socket")
+            (.setSoTimeout sock 1000)
             (with-open [in (BufferedReader. (InputStreamReader. (.getInputStream sock) StandardCharsets/UTF_8))
                         out (PrintWriter. (BufferedOutputStream. (.getOutputStream sock)) true StandardCharsets/UTF_8)]
               (.println out "Hello World!")
@@ -73,10 +72,7 @@
 
               (.println out "Hallo, 你好世界")
               (t/is (= "Hallo, 你好世界" (.readLine in)))))))
-        #_(reset! old-state @st)
-        #_(t/is (= {:res "disallow-connect"}))
       (finally
-        (break)
         (yasp/close! st)
         (reset! old-state @st)))))
 ;(impl/expire-connections! st (System/currentTimeMillis))
