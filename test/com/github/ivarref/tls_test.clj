@@ -119,7 +119,7 @@
               _ (yasp/proxy! proxy-cfg {:op      "connect"
                                         :payload (u/pr-str-safe {:host "127.0.0.1" :port @echo-server})})]
           (try
-            (with-open [sock (tls/socket tls-2 "localhost" 8888 3000)]
+            (with-open [sock (tls/socket tls-2 "localhost" @tls-client 3000)]
               (.setSoTimeout sock 1000)
               (with-open [in (BufferedReader. (InputStreamReader. (.getInputStream sock) StandardCharsets/UTF_8))
                           out (PrintWriter. (BufferedOutputStream. (.getOutputStream sock)) true StandardCharsets/UTF_8)]
@@ -135,7 +135,7 @@
                          {:op      "connect"
                           :payload (u/pr-str-safe {:host "127.0.0.1" :port @echo-server})})
 
-            (with-open [sock (tls/socket tls-1 "localhost" 7777 3000)]
+            (with-open [sock (tls/socket tls-1 "localhost" @tls-client2 3000)]
               (.setSoTimeout sock 1000)
               (with-open [in (BufferedReader. (InputStreamReader. (.getInputStream sock) StandardCharsets/UTF_8))
                           out (PrintWriter. (BufferedOutputStream. (.getOutputStream sock)) true StandardCharsets/UTF_8)]
@@ -184,7 +184,7 @@
               _ (yasp/proxy! proxy-cfg {:op      "connect"
                                         :payload (u/pr-str-safe {:host "127.0.0.1" :port @echo-server})})]
           (try
-            (with-open [sock (tls/socket tls-1 "localhost" 8888 3000)]
+            (with-open [sock (tls/socket tls-1 "localhost" @tls-client 3000)]
               (.setSoTimeout sock 1000)
               (with-open [in (BufferedReader. (InputStreamReader. (.getInputStream sock) StandardCharsets/UTF_8))
                           out (PrintWriter. (BufferedOutputStream. (.getOutputStream sock)) true StandardCharsets/UTF_8)]
