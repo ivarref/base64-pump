@@ -1,13 +1,12 @@
 (ns com.github.ivarref.server
   (:refer-clojure :exclude [println])
-  (:require [clojure.stacktrace :as st]
-            [clojure.tools.logging :as log]
-            [com.github.ivarref.yasp.utils :as u]
-            [com.github.ivarref.yasp.tls :as tls])
+  (:require [clojure.tools.logging :as log]
+            [com.github.ivarref.yasp.tls :as tls]
+            [com.github.ivarref.yasp.utils :as u])
   (:import (clojure.lang IDeref)
            (java.io BufferedInputStream BufferedOutputStream Closeable InputStream OutputStream)
            (java.lang AutoCloseable)
-           (java.net InetAddress InetSocketAddress ServerSocket Socket)
+           (java.net InetSocketAddress ServerSocket Socket)
            (javax.net.ssl SSLHandshakeException SSLServerSocket)))
 
 (defn add-to-set! [state key what]
@@ -109,9 +108,10 @@
   (let [ss (if tls-context
              (tls/server-socket tls-context "127.0.0.1" (or tls-port 0))
              (doto
-               (ServerSocket. (if local-port
-                                local-port
-                                0) 10 (InetAddress/getLoopbackAddress))
+               (ServerSocket.)
+               (.bind (InetSocketAddress. "127.0.0.1" ^int (if local-port
+                                                             local-port
+                                                             0)))
                (.setReuseAddress true)))
         ret (reify
               AutoCloseable
