@@ -96,7 +96,7 @@
                                 (finally
                                   (close-silently! sock state)))
                               (catch Throwable t
-                                (if-not (closed? state)
+                                (if-not (or (.isClosed sock) (closed? state))
                                   (log/error "Unexpected exception in handler:" (class t) (ex-message t))
                                   (log/debug t "Exception in handler:" (class t) (ex-message t))))
                               (finally

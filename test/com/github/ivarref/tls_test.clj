@@ -36,19 +36,25 @@
     [(str ca-cert server-cert server-key)
      (str ca-cert client-cert client-key)]))
 
-(defn tls-pump [proxy-cfg {:keys [^Socket sock]}]
-  (with-open [tls-in (BufferedInputStream. (.getInputStream sock))
-              tls-out (BufferedOutputStream. (.getOutputStream sock))]
-    (loop []
-      (when-let [chunk (u/read-max-bytes tls-in 64000)]
-        (let [resp (yasp/proxy! proxy-cfg
-                                {:op      "send"
-                                 :session (get proxy-cfg :session)
-                                 :payload (u/bytes->base64-str chunk)})]
-          (when (= "ok-send" (get resp :res))
-            (u/write-bytes (u/base64-str->bytes (get resp :payload))
-                           tls-out)))
-        (recur)))))
+(defn tls-pump [{:keys [pump-threads] :as proxy-cfg} {:keys [^Socket sock]}]
+  (try
+    (when pump-threads
+      (swap! pump-threads inc))
+    (with-open [tls-in (BufferedInputStream. (.getInputStream sock))
+                tls-out (BufferedOutputStream. (.getOutputStream sock))]
+      (loop []
+        (when-let [chunk (u/read-max-bytes tls-in 64000)]
+          (let [resp (yasp/proxy! proxy-cfg
+                                  {:op      "send"
+                                   :session (get proxy-cfg :session)
+                                   :payload (u/bytes->base64-str chunk)})]
+            (when (= "ok-send" (get resp :res))
+              (u/write-bytes (u/base64-str->bytes (get resp :payload))
+                             tls-out)))
+          (recur))))
+    (finally
+      (when pump-threads
+        (swap! pump-threads dec)))))
 
 (t/deftest tls-hello
   (let [st (atom {})
@@ -141,7 +147,55 @@
         (yasp/close! st)
         (reset! old-state @st)))))
 
-;(impl/expire-connections! st (System/currentTimeMillis))
-;(some->> (get-in @st [:tls-proxy "127.0.0.1" 9999 :state])
-;         (s/close!))))))
+(defn keep-sending [{:keys [^Socket sock closed?]}]
+  (try
+    (with-open [in (BufferedInputStream. (.getInputStream sock))
+                out (BufferedOutputStream. (.getOutputStream sock))]
+      (loop []
+        (u/write-bytes (.getBytes "Hello\n" StandardCharsets/UTF_8) out)
+        (recur)))
+    (catch Throwable t
+      (if-not (or (.isClosed sock) @closed?)
+        (log/warn "keep-sending handler error:" (ex-message t))
+        (log/debug "keep-sending handler error:" (ex-message t))))
+    (finally
+      (log/debug "keep-sending handler exiting"))))
 
+(t/deftest pump-threads-exits
+  (let [st (atom {})
+        kp1 (gen-key-pair)
+        pt (atom 0)
+        done? (promise)
+        _ (add-watch pt :watch (fn [_ _reference _old-state new-state]
+                                 (when (= new-state 0)
+                                   (deliver done? true))))
+        proxy-cfg {:state          st
+                   :allow-connect? (constantly true)
+                   :now-ms         0
+                   :session        "1"
+                   :tls-str        (first kp1)
+                   :tls-port       1919}]
+    (try
+      (with-open [echo-server (s/start-server! (atom {}) {:local-port 9999} keep-sending)
+                  tls-client (s/start-server! (atom {}) {:local-port 8888} (partial tls-pump
+                                                                                    (assoc proxy-cfg
+                                                                                      :pump-threads pt)))]
+        (let [tls-1 (tls/ssl-context-or-throw (second kp1) nil)
+              _ (yasp/proxy! proxy-cfg {:op      "connect"
+                                        :payload (u/pr-str-safe {:host "127.0.0.1" :port @echo-server})})]
+          (try
+            (with-open [sock (tls/socket tls-1 "localhost" 8888 3000)]
+              (.setSoTimeout sock 1000)
+              (with-open [in (BufferedReader. (InputStreamReader. (.getInputStream sock) StandardCharsets/UTF_8))
+                          out (PrintWriter. (BufferedOutputStream. (.getOutputStream sock)) true StandardCharsets/UTF_8)]
+                (t/is (= "Hello" (.readLine in)))
+                (t/is (= "Hello" (.readLine in)))
+                (t/is (= "Hello" (.readLine in)))))
+            (t/is (true? (deref done? 3000 false)))
+            (t/is (= 0 @pt))
+
+            #_(reset! old-state (some->> @st :tls-proxy))
+            (catch Throwable t
+              (log/info "Error:" (ex-message t))))))
+      (finally
+        (yasp/close! st)))))
