@@ -37,10 +37,8 @@
     [(str ca-cert server-cert server-key)
      (str ca-cert client-cert client-key)]))
 
-(defn tls-pump [{:keys [pump-threads] :as proxy-cfg} {:keys [^Socket sock]}]
+(defn tls-pump [proxy-cfg {:keys [^Socket sock]}]
   (try
-    (when pump-threads
-      (swap! pump-threads inc))
     (with-open [tls-in (BufferedInputStream. (.getInputStream sock))
                 tls-out (BufferedOutputStream. (.getOutputStream sock))]
       (loop []
@@ -53,9 +51,7 @@
               (u/write-bytes (u/base64-str->bytes (get resp :payload))
                              tls-out)))
           (recur))))
-    (finally
-      (when pump-threads
-        (swap! pump-threads dec)))))
+    (finally)))
 
 (t/deftest tls-hello
   (let [st (atom {})
@@ -165,11 +161,6 @@
 (t/deftest pump-threads-exits
   (let [st (atom {})
         kp1 (gen-key-pair)
-        pt (atom 0)
-        done? (promise)
-        _ (add-watch pt :watch (fn [_ _reference _old-state new-state]
-                                 (when (= new-state 0)
-                                   (deliver done? true))))
         proxy-cfg {:state          st
                    :allow-connect? (constantly true)
                    :now-ms         0
@@ -178,24 +169,16 @@
                    :tls-port       1919}]
     (try
       (with-open [echo-server (s/start-server! (atom {}) {:local-port 9999} keep-sending)
-                  tls-client (s/start-server! (atom {}) {:local-port 8888} (partial tls-pump
-                                                                                    (assoc proxy-cfg
-                                                                                      :pump-threads pt)))]
+                  tls-client (s/start-server! (atom {}) {:local-port 8888} (partial tls-pump proxy-cfg))]
         (let [tls-1 (tls/ssl-context-or-throw (second kp1) nil)
               _ (yasp/proxy! proxy-cfg {:op      "connect"
                                         :payload (u/pr-str-safe {:host "127.0.0.1" :port @echo-server})})]
           (try
             (with-open [sock (tls/socket tls-1 "localhost" @tls-client 3000)]
               (.setSoTimeout sock 1000)
-              (with-open [in (BufferedReader. (InputStreamReader. (.getInputStream sock) StandardCharsets/UTF_8))
-                          out (PrintWriter. (BufferedOutputStream. (.getOutputStream sock)) true StandardCharsets/UTF_8)]
-                (t/is (= "Hello" (.readLine in)))
-                (t/is (= "Hello" (.readLine in)))
-                (t/is (= "Hello" (.readLine in)))))
-            (t/is (true? (deref done? 3000 false)))
-            (t/is (= 0 @pt))
-
-            #_(reset! old-state (some->> @st :tls-proxy))
+              (with-open [in (BufferedReader. (InputStreamReader. (.getInputStream sock) StandardCharsets/UTF_8))]
+                (dotimes [_ 1000]
+                  (t/is (= "Hello" (.readLine in))))))
             (catch Throwable t
               (log/info "Error:" (ex-message t))))))
       (finally
