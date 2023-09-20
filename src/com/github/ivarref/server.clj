@@ -1,13 +1,14 @@
 (ns com.github.ivarref.server
   (:refer-clojure :exclude [println])
-  (:require [clojure.tools.logging :as log]
+  (:require [clojure.stacktrace :as st]
+            [clojure.tools.logging :as log]
             [com.github.ivarref.yasp.utils :as u]
             [com.github.ivarref.yasp.tls :as tls])
   (:import (clojure.lang IDeref)
            (java.io BufferedInputStream BufferedOutputStream Closeable InputStream OutputStream)
            (java.lang AutoCloseable)
            (java.net InetAddress InetSocketAddress ServerSocket Socket)
-           (javax.net.ssl SSLServerSocket)))
+           (javax.net.ssl SSLHandshakeException SSLServerSocket)))
 
 (defn add-to-set! [state key what]
   (swap! state (fn [old-state] (update old-state key (fnil conj #{}) what))))
@@ -45,10 +46,16 @@
       (tls/accept ss)
       (.accept ss))
     (catch Throwable t
-      (if-not (closed? state)
-        (log/warn "Error in accept-inner on port" (.getLocalPort ss) ":" (ex-message t))
-        (log/debug "Error in accept-inner on port" (.getLocalPort ss) ":" (ex-message t)))
-      nil)))
+      #_(if (instance? (st/root-cause t) SSLHandshakeException)
+          (log/info "Handshake error"))
+      (do
+        (if-not (or (closed? state)
+                    (instance? SSLHandshakeException t))
+          (do
+            (log/warn "Error in accept-inner on port" (.getLocalPort ss) ":" (ex-message t)))
+          (log/debug "Error in accept-inner on port" (.getLocalPort ss) ":" (ex-message t)))
+        nil))))
+
 
 (defn echo-handler [{:keys [^Socket sock closed?]}]
   (try
@@ -70,29 +77,32 @@
 
 (defn server-accept-loop [^ServerSocket ss {:keys [socket-timeout state] :as _cfg} handler]
   (loop []
-    (when-let [^Socket sock (accept-inner ss state)]
-      (assert (pos-int? socket-timeout) ":socket-timeout must be a pos-int")
-      (.setSoTimeout sock socket-timeout)
-      (add-to-set! state :open-sockets sock)
-      (let [fut (future (try
-                          (swap! state update :active-futures (fnil inc 0))
-                          (try
-                            (handler {:sock    sock
-                                      :state   state
-                                      :closed? (reify
-                                                 IDeref,
-                                                 (deref [_]
-                                                   (closed? state)))})
-                            (finally
-                              (close-silently! sock state)))
-                          (catch Throwable t
-                            (if-not (closed? state)
-                              (log/error "Unexpected exception in handler:" (class t) (ex-message t))
-                              (log/debug t "Exception in handler:" (class t) (ex-message t))))
-                          (finally
-                            (swap! state update :active-futures (fnil dec 0)))))]
-        (add-to-set! state :futures fut))
-      (recur))))
+    (if (.isClosed ss)
+      (log/debug "Server closed, exiting")
+      (do
+        (when-let [^Socket sock (accept-inner ss state)]
+          (assert (pos-int? socket-timeout) ":socket-timeout must be a pos-int")
+          (.setSoTimeout sock socket-timeout)
+          (add-to-set! state :open-sockets sock)
+          (let [fut (future (try
+                              (swap! state update :active-futures (fnil inc 0))
+                              (try
+                                (handler {:sock    sock
+                                          :state   state
+                                          :closed? (reify
+                                                     IDeref,
+                                                     (deref [_]
+                                                       (closed? state)))})
+                                (finally
+                                  (close-silently! sock state)))
+                              (catch Throwable t
+                                (if-not (closed? state)
+                                  (log/error "Unexpected exception in handler:" (class t) (ex-message t))
+                                  (log/debug t "Exception in handler:" (class t) (ex-message t))))
+                              (finally
+                                (swap! state update :active-futures (fnil dec 0)))))]
+            (add-to-set! state :futures fut)))
+        (recur)))))
 
 (defn start-server-impl!
   [{:keys [state tls-context tls-port local-port] :as cfg} handler]

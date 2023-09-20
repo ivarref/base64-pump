@@ -1,5 +1,6 @@
 (ns com.github.ivarref.tls-test
   (:require [clj-commons.pretty.repl]
+            [clojure.stacktrace :as st]
             [clojure.string :as str]
             [clojure.test :as t]
             [clojure.tools.logging :as log]
@@ -10,16 +11,12 @@
             [com.github.ivarref.yasp.utils :as u])
   (:import (java.io BufferedInputStream BufferedOutputStream BufferedReader InputStreamReader PrintWriter)
            (java.net Socket)
-           (java.nio.charset StandardCharsets)))
+           (java.nio.charset StandardCharsets)
+           (javax.net.ssl SSLException)))
 
 (set! *warn-on-reflection* true)
 
-(clj-commons.pretty.repl/install-pretty-exceptions)
-
-(defn gen-key-pair []
-  (let [{:keys [ca-cert server-cert server-key client-cert client-key]} (locksmith/gen-certs {:duration-days 1})]
-    [(str ca-cert server-cert server-key)
-     (str ca-cert client-cert client-key)]))
+#_(clj-commons.pretty.repl/install-pretty-exceptions)
 
 (comment
   #_(defonce st (atom {})))
@@ -34,6 +31,11 @@
   (.flush System/out)
   (break))
 
+(defn gen-key-pair []
+  (let [{:keys [ca-cert server-cert server-key client-cert client-key]} (locksmith/gen-certs {:duration-days 1})]
+    [(str ca-cert server-cert server-key)
+     (str ca-cert client-cert client-key)]))
+
 (defn tls-pump [proxy-cfg {:keys [^Socket sock]}]
   (with-open [tls-in (BufferedInputStream. (.getInputStream sock))
               tls-out (BufferedOutputStream. (.getOutputStream sock))]
@@ -41,7 +43,7 @@
       (when-let [chunk (u/read-max-bytes tls-in 64000)]
         (let [resp (yasp/proxy! proxy-cfg
                                 {:op      "send"
-                                 :session "1"
+                                 :session (get proxy-cfg :session)
                                  :payload (u/bytes->base64-str chunk)})]
           (when (= "ok-send" (get resp :res))
             (u/write-bytes (u/base64-str->bytes (get resp :payload))
@@ -75,6 +77,70 @@
       (finally
         (yasp/close! st)
         (reset! old-state @st)))))
+
+(t/deftest bad-tls-str-server
+  (let [st (atom {})
+        proxy-cfg {:state          st
+                   :allow-connect? (constantly true)
+                   :now-ms         0
+                   :session        "1"
+                   :tls-str        "asdf"
+                   :tls-port       1919}]
+    (try
+      (with-open [echo-server (s/start-server! (atom {}) {:local-port 9999} s/echo-handler)]
+        (t/is (= "error"
+                 (:res (yasp/proxy! proxy-cfg {:op      "connect"
+                                               :payload (u/pr-str-safe {:host "127.0.0.1" :port @echo-server})})))))
+      (finally
+        (yasp/close! st)))))
+
+(t/deftest bad-tls-client
+  (let [st (atom {})
+        kp1 (gen-key-pair)
+        kp2 (gen-key-pair)
+        proxy-cfg {:state          st
+                   :allow-connect? (constantly true)
+                   :now-ms         0
+                   :session        "1"
+                   :tls-str        (first kp1)
+                   :tls-port       1919}]
+    (try
+      (with-open [echo-server (s/start-server! (atom {}) {:local-port 9999} s/echo-handler)
+                  tls-client (s/start-server! (atom {}) {:local-port 8888} (partial tls-pump proxy-cfg))
+                  tls-client2 (s/start-server! (atom {}) {:local-port 7777} (partial tls-pump (assoc proxy-cfg :session "2")))]
+        (let [tls-1 (tls/ssl-context-or-throw (second kp1) nil)
+              tls-2 (tls/ssl-context-or-throw (second kp2) nil)
+              _ (yasp/proxy! proxy-cfg {:op      "connect"
+                                        :payload (u/pr-str-safe {:host "127.0.0.1" :port @echo-server})})]
+          (try
+            (with-open [sock (tls/socket tls-2 "localhost" 8888 3000)]
+              (.setSoTimeout sock 1000)
+              (with-open [in (BufferedReader. (InputStreamReader. (.getInputStream sock) StandardCharsets/UTF_8))
+                          out (PrintWriter. (BufferedOutputStream. (.getOutputStream sock)) true StandardCharsets/UTF_8)]
+                (let [error? (atom false)]
+                  (try
+                    (.readLine in)
+                    (catch Throwable t
+                      (t/is (true? (instance? SSLException t)))
+                      (reset! error? true)))
+                  (t/is (true? @error?)))))
+
+            (yasp/proxy! (assoc proxy-cfg :session "2")
+                         {:op      "connect"
+                          :payload (u/pr-str-safe {:host "127.0.0.1" :port @echo-server})})
+
+            (with-open [sock (tls/socket tls-1 "localhost" 7777 3000)]
+              (.setSoTimeout sock 1000)
+              (with-open [in (BufferedReader. (InputStreamReader. (.getInputStream sock) StandardCharsets/UTF_8))
+                          out (PrintWriter. (BufferedOutputStream. (.getOutputStream sock)) true StandardCharsets/UTF_8)]
+                (.println out "Hallo, 你好世界")
+                (t/is (= "Hallo, 你好世界" (.readLine in)))))
+            (catch Throwable t
+              (log/info "Error:" (ex-message t))))))
+      (finally
+        (yasp/close! st)
+        (reset! old-state @st)))))
+
 ;(impl/expire-connections! st (System/currentTimeMillis))
 ;(some->> (get-in @st [:tls-proxy "127.0.0.1" 9999 :state])
 ;         (s/close!))))))

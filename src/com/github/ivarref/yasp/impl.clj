@@ -25,7 +25,7 @@
             (if (false? (get-in @state [:tls-proxy host port :running?] false))
               (let [new-proxy (server/bootstrap-tls-proxy! cfg client-config)]
                 (swap! state assoc-in [:tls-proxy host port] new-proxy))
-              (log/info "TLS proxy bootstrapped, doing nothing"))))
+              (log/debug "TLS proxy bootstrapped, doing nothing"))))
         (let [sock (Socket.)
               socket-timeout (get client-config :socket-timeout socket-timeout)
               connect-timeout (get client-config :connect-timeout connect-timeout)
