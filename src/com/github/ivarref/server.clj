@@ -163,6 +163,44 @@
       (when (pump in out)
         (recur)))))
 
+(defn tls-handler [my-id state ^Socket sock host port connect-timeout socket-timeout]
+  (try
+    (let [remote (Socket.)]
+      (.setSoTimeout remote socket-timeout)
+      (when (try
+              (log/debug "TLS proxy" my-id "received connection")
+              (.connect remote (InetSocketAddress. ^String host ^Integer port) ^Integer connect-timeout)
+              (add-to-set! state :open-sockets remote)
+              true
+              (catch Throwable t
+                (log/warn t "TLS proxy" my-id "could not connect to remote host" host port)
+                nil))
+        (log/debug "TLS proxy" my-id "OK connected to" host port)
+        (let [fut (future
+                    (try
+                      (swap! state update :active-futures (fnil inc 0))
+                      (try
+                        (pump-socks sock remote)
+                        (catch Throwable t
+                          (if (or (.isClosed sock) (.isClosed remote))
+                            (log/debug "TLS pump2: Src or dst closed connection. Got exception:" (ex-message t))
+                            (log/error t "Unexpected error in TLS pump2:" (ex-message t)))))
+                      (catch Throwable t
+                        (log/error t "Unexpected exception in TLS pump2:" (ex-message t)))
+                      (finally
+                        (log/debug "TLS pump2 exiting")
+                        (swap! state update :active-futures (fnil dec 0)))))]
+          (add-to-set! state :futures fut)
+          (try
+            (pump-socks remote sock)
+            (catch Throwable t
+              (if (or (.isClosed sock) (.isClosed remote))
+                (log/debug "TLS pump1: Src or dst closed connection. Got exception:" (ex-message t))
+                (log/error t "Unexpected error in TLS pump1:" (ex-message t)))))
+          @fut)))
+    (finally
+      (log/debug "TLS pump1 exiting"))))
+
 (defn bootstrap-tls-proxy! [{:keys [tls-str connect-timeout socket-timeout] :as cfg} {:keys [host port]}]
   (let [my-id (swap! id inc)
         state (atom {})
@@ -170,42 +208,7 @@
                     state
                     (assoc cfg :tls-context (tls/ssl-context-or-throw tls-str nil))
                     (fn [{:keys [^Socket sock closed?]}]
-                      (try
-                        (let [remote (Socket.)]
-                          (.setSoTimeout remote socket-timeout)
-                          (when (try
-                                  (log/info "TLS proxy" my-id "received connection")
-                                  (.connect remote (InetSocketAddress. ^String host ^Integer port) ^Integer connect-timeout)
-                                  (add-to-set! state :open-sockets remote)
-                                  true
-                                  (catch Throwable t
-                                    (log/warn t "TLS proxy" my-id "could not connect to remote host" host port)
-                                    nil))
-                            (log/info "TLS proxy" my-id "OK connected to" host port)
-                            (let [fut (future
-                                        (try
-                                          (swap! state update :active-futures (fnil inc 0))
-                                          (try
-                                            (pump-socks sock remote)
-                                            (catch Throwable t
-                                              (if (or (.isClosed sock) (.isClosed remote))
-                                                (log/info "TLS pump2: Src or dst closed connection. Got exception:" (ex-message t))
-                                                (log/error t "Unexpected error in TLS pump2:" (ex-message t)))))
-                                          (catch Throwable t
-                                            (log/error "Unexpected exception in TLS pump2:" (ex-message t)))
-                                          (finally
-                                            (log/info "TLS pump2 exiting")
-                                            (swap! state update :active-futures (fnil dec 0)))))]
-                              (add-to-set! state :futures fut)
-                              (try
-                                (pump-socks remote sock)
-                                (catch Throwable t
-                                  (if (or (.isClosed sock) (.isClosed remote))
-                                    (log/info "TLS pump1: Src or dst closed connection. Got exception:" (ex-message t))
-                                    (log/error t "Unexpected error in TLS pump1:" (ex-message t)))))
-                              @fut)))
-                        (finally
-                          (log/info "TLS pump1 exiting")))))]
+                      (tls-handler my-id state sock host port connect-timeout socket-timeout)))]
     (log/info "TLS proxy" my-id "running on port" @tls-proxy ", forwarding to" host port)
     {:state    state
      :proxy    tls-proxy
