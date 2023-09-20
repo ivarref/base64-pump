@@ -43,8 +43,8 @@
     (.accept ss)
     (catch Throwable t
       (if-not (closed? state)
-        (log/error t "Error in accept-inner:" (ex-message t))
-        (log/debug t "Error in accept-inner:" (ex-message t)))
+        (log/error t "Error in accept-inner on port" (.getLocalPort ss) ":" (ex-message t))
+        (log/info "Error in accept-inner on port" (.getLocalPort ss) ":" (ex-message t)))
       nil)))
 
 (defn echo-handler [{:keys [^Socket sock closed?]}]
@@ -95,12 +95,15 @@
   [{:keys [state tls-context tls-port local-port] :as cfg} handler]
   (let [ss (if tls-context
              (tls/server-socket tls-context "127.0.0.1" (or tls-port 0))
-             (ServerSocket. (if local-port
-                              local-port
-                              0) 100 (InetAddress/getLoopbackAddress)))
+             (doto
+               (ServerSocket. (if local-port
+                                local-port
+                                0) 10 (InetAddress/getLoopbackAddress))
+               (.setReuseAddress true)))
         ret (reify
               AutoCloseable
               (close [_]
+                (log/info "Closing proxy running at port" (.getLocalPort ss))
                 (close! state))
               IDeref
               (deref [_]
@@ -113,6 +116,7 @@
                   cfg
                   handler)
                 (finally
+                  (log/info "Accept loop exiting for port" (.getLocalPort ss))
                   (swap! state update :active-futures (fnil dec 0)))))]
     (add-to-set! state :open-sockets ss)
     (add-to-set! state :futures fut)

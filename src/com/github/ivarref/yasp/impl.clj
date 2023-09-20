@@ -14,9 +14,12 @@
 (comment
   (set! *warn-on-reflection* true))
 
+(defonce id (atom 0))
+
 (defn bootstrap-tls-proxy! [{:keys [tls-str connect-timeout socket-timeout] :as cfg} {:keys [host port]}]
-  (log/info "TLS proxy starting")
-  (let [proxy-state (atom {})
+  (let [my-id (swap! id inc)
+        _ (log/info "TLS proxy" my-id "starting")
+        proxy-state (atom {})
         tls-proxy (server/start-server!
                     proxy-state
                     (assoc cfg :tls-context (tls/ssl-context-or-throw tls-str nil))
@@ -24,18 +27,17 @@
                       (let [remote (Socket.)]
                         (.setSoTimeout remote socket-timeout)
                         (when (try
-                                (log/info "TLS proxy received connection")
+                                (log/info "TLS proxy" my-id "received connection")
                                 (.connect remote (InetSocketAddress. ^String host ^Integer port) ^Integer connect-timeout)
                                 true
                                 (catch Throwable t
-                                  (log/warn t "TLS proxy could not connect to remote host" host port)
+                                  (log/warn t "TLS proxy" my-id "could not connect to remote host" host port)
                                   nil))
-                          (log/info "OK connect")))
-                      (println "got new TLS connection")))]
-    (log/info "TLS proxy running on port" @tls-proxy)
-    {:state proxy-state
-     :proxy tls-proxy}))
-
+                          (log/info "TLS proxy" my-id "OK connect")))))]
+    (log/info "TLS proxy" my-id "running on port" @tls-proxy ", forwarding to" host port)
+    {:state    proxy-state
+     :proxy    tls-proxy
+     :running? true}))
 
 (defn handle-connect [{:keys [state allow-connect? connect-timeout session now-ms socket-timeout chunk-size tls-str]
                        :as   cfg}
@@ -47,10 +49,10 @@
       (do
         (when (some? tls-str)
           (locking state
-            (if (not= ::none (get-in @state [:tls-proxy host port] ::none))
-              (log/info "TLS proxy bootstrapped, doing nothing")
+            (if (false? (get-in @state [:tls-proxy host port :running?] false))
               (let [new-proxy (bootstrap-tls-proxy! cfg client-config)]
-                (swap! state assoc-in [:tls-proxy host port] new-proxy)))))
+                (swap! state assoc-in [:tls-proxy host port] new-proxy))
+              (log/info "TLS proxy bootstrapped, doing nothing"))))
         (let [sock (Socket.)
               socket-timeout (get client-config :socket-timeout socket-timeout)
               connect-timeout (get client-config :connect-timeout connect-timeout)
@@ -105,8 +107,18 @@
     (let [s @state]
       (doseq [[session-id {:keys [last-access]}] (get s :sessions)]
         (let [inactive-ms (- now-ms last-access)]
-          (when (>= inactive-ms (* 10 60000))
+          (when (or (= now-ms -1) (>= inactive-ms (* 10 60000)))
             (close-session! state session-id)))))))
+
+(defn close! [state]
+  (when state
+    (expire-connections! state -1)
+    (let [s @state]
+      (doseq [[host v] (get s :tls-proxy)]
+        (doseq [[port tls-proxy] v]
+          (server/close! (get tls-proxy :state))
+          (swap! state (fn [old-state] (assoc-in old-state [:tls-proxy host port :running?] false)))
+          (log/info "Shutting down proxy at" host port))))))
 
 (defn handle-close
   [{:keys [state]} {:keys [session]}]

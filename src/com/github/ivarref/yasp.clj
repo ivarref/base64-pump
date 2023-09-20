@@ -56,3 +56,9 @@
           (when (not= tls-str ::none)
             {:tls-str tls-str})))
     data))
+
+(defn close!
+  ([]
+   (close! default-state))
+  ([state]
+   (impl/close! state)))
