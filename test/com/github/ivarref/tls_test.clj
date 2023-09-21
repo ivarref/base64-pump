@@ -63,12 +63,12 @@
                    :tls-str        server-keys
                    :tls-port       1919}]
     (try
-      (with-open [echo-server (s/start-server! (atom {}) {:local-port 9999} s/echo-handler)
-                  tls-client (s/start-server! (atom {}) {:local-port 9876} (partial tls-pump proxy-cfg))]
+      (with-open [remote-server (s/start-server! (atom {}) {:local-port 9999} s/echo-handler)
+                  tls-decode-server (s/start-server! (atom {}) {:local-port 9876} (partial tls-pump proxy-cfg))]
         (let [tls-context (tls/ssl-context-or-throw client-keys nil)
               _ (yasp/proxy! proxy-cfg {:op      "connect"
-                                        :payload (u/pr-str-safe {:host "127.0.0.1" :port @echo-server})})]
-          (with-open [sock (tls/socket tls-context "localhost" 9876 3000)]
+                                        :payload (u/pr-str-safe {:host "127.0.0.1" :port @remote-server})})]
+          (with-open [sock (tls/socket tls-context "localhost" @tls-decode-server 3000)]
             (.setSoTimeout sock 1000)
             (with-open [in (BufferedReader. (InputStreamReader. (.getInputStream sock) StandardCharsets/UTF_8))
                         out (PrintWriter. (BufferedOutputStream. (.getOutputStream sock)) true StandardCharsets/UTF_8)]
@@ -81,7 +81,22 @@
         (yasp/close! st)
         (reset! old-state @st)))))
 
-(t/deftest bad-tls-str-server
+(t/deftest bad-tls-str-server-1
+  (let [st (atom {})
+        proxy-cfg {:state          st
+                   :allow-connect? (constantly true)
+                   :now-ms         0
+                   :session        "1"
+                   :tls-str        nil
+                   :tls-port       1919}]
+    (try
+      (with-open [remote (s/start-server! (atom {}) {:local-port 9999} s/echo-handler)]
+        (t/is (= "error" (:res (yasp/proxy! proxy-cfg {:op      "connect"
+                                                       :payload (u/pr-str-safe {:host "127.0.0.1" :port @remote})})))))
+      (finally
+        (yasp/close! st)))))
+
+(t/deftest bad-tls-str-server-2
   (let [st (atom {})
         proxy-cfg {:state          st
                    :allow-connect? (constantly true)
@@ -90,10 +105,9 @@
                    :tls-str        "asdf"
                    :tls-port       1919}]
     (try
-      (with-open [echo-server (s/start-server! (atom {}) {:local-port 9999} s/echo-handler)]
-        (t/is (= "error"
-                 (:res (yasp/proxy! proxy-cfg {:op      "connect"
-                                               :payload (u/pr-str-safe {:host "127.0.0.1" :port @echo-server})})))))
+      (with-open [remote (s/start-server! (atom {}) {:local-port 9999} s/echo-handler)]
+        (t/is (= "error" (:res (yasp/proxy! proxy-cfg {:op      "connect"
+                                                       :payload (u/pr-str-safe {:host "127.0.0.1" :port @remote})})))))
       (finally
         (yasp/close! st)))))
 

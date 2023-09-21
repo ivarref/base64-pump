@@ -6,7 +6,7 @@
             [com.github.ivarref.server :as server]
             [com.github.ivarref.yasp.utils :as u])
   (:import (java.io BufferedInputStream BufferedOutputStream InputStream)
-           (java.net InetSocketAddress Socket SocketTimeoutException UnknownHostException)))
+           (java.net ConnectException InetSocketAddress Socket SocketTimeoutException UnknownHostException)))
 
 ; Private API, subject to change
 
@@ -21,7 +21,7 @@
   (let [{:keys [host port] :as client-config} (edn/read-string payload)]
     (if (allow-connect? (select-keys client-config [:host :port]))
       (do
-        (when (some? tls-str)
+        (when (not= :yasp/none tls-str)
           (locking state
             (if (false? (get-in @state [:tls-proxy host port :running?] false))
               (let [new-proxy (server/bootstrap-tls-proxy! cfg client-config)]
@@ -32,7 +32,7 @@
               connect-timeout (get client-config :connect-timeout connect-timeout)
               chunk-size (get client-config :chunk-size chunk-size)
               old-port port
-              port (if (some? tls-str)
+              port (if (not= :yasp/none tls-str)
                      (deref (get-in @state [:tls-proxy host port :proxy]))
                      port)
               host (if (some? tls-str) "127.0.0.1" host)]
@@ -53,11 +53,14 @@
                :session session})
             (catch UnknownHostException uhe
               (log/warn "Unknown host exception during connect:" (ex-message uhe))
-              {:res     "unknown-host"
-               :payload host})
+              {:res     "connect-error"
+               :payload (str "unknown host: " host)})
             (catch SocketTimeoutException ste
               (log/warn "Socket timeout during connect:" (ex-message ste))
-              {:res "connect-timeout"})
+              {:res "connect-error"})
+            (catch ConnectException ce
+              (log/warn "Connect exception during connect:" (ex-message ce))
+              {:res "connect-error"})
             (catch Throwable t
               (log/error t "Unhandled exception in connect:" (ex-message t))
               (log/error "Error message:" (ex-message t) "of type" (str (class t)))

@@ -175,7 +175,7 @@
 
 (defn tls-handler [my-id state ^Socket sock host port connect-timeout socket-timeout]
   (try
-    (let [remote (Socket.)]
+    (with-open [remote (Socket.)]
       (.setSoTimeout remote socket-timeout)
       (when (try
               (log/debug "TLS proxy" my-id "received connection")
