@@ -1,4 +1,5 @@
 (ns com.github.ivarref.yasp.utils
+  (:refer-clojure :exclude [future])
   (:require [clojure.edn :as edn]
             [clojure.java.io :as io]
             [clojure.string :as str]
@@ -99,7 +100,7 @@
 (def ^:dynamic *max-active-futures* nil)
 (def ^:dynamic *fut-map* nil)
 
-(defmacro fut
+(defmacro future
   [& body]
   (let [info (assoc (meta &form) :file *file*)]
     `(let [info# ~info
@@ -114,7 +115,7 @@
                           (when (some? *active-futures*)
                             (swap! *fut-map* update info# dec)
                             (swap! *active-futures* dec)))))
-           f# (future (body-fn#))]
+           f# (clojure.core/future (body-fn#))]
        f#)))
 
 (defn report []
@@ -142,6 +143,6 @@
     (binding [*active-futures* (atom 0)
               *max-active-futures* (atom 0)
               *fut-map* m]
-      (fut (Thread/sleep 1000))
+      (future (Thread/sleep 1000))
       (Thread/sleep 10))
     @m))
