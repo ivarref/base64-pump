@@ -1,6 +1,7 @@
 (ns com.github.ivarref.yasp.impl
   (:refer-clojure :exclude [future])
   (:require [clojure.edn :as edn]
+            [clojure.java.io :as io]
             [clojure.stacktrace :as st]
             [clojure.tools.logging :as log]
             [com.github.ivarref.server :as server]
@@ -138,38 +139,49 @@
     {:res "unknown-session"}))
 
 (defn proxy-impl
-  [{:keys [state tls-str] :as cfg} {:keys [op session] :as data}]
+  [{:keys [state tls-str tls-file] :as cfg} {:keys [op session] :as data}]
   (try
     (assert (some? state))
     (assert (string? op) "Expected :op to be a string")
     (expire-connections! state (:now-ms cfg))
-    (if-let [tls-error (when (not= tls-str :yasp/none)
-                         (locking state
-                           (when (false? (get @state :tls-verified? false))
-                             (try
-                               (tls/ssl-context-or-throw tls-str nil)
-                               (swap! state assoc :tls-verified? true)
-                               (log/info "TLS server context verified")
-                               nil
-                               (catch Throwable t
-                                 (log/error "TLS configuration error:" (ex-message t))
-                                 {:res     "tls-config-error"
-                                  :payload (str "Message: " (ex-message t))})))))]
-      tls-error
-      (cond (= "connect" op)
-            (handle-connect cfg data)
+    (let [[tls-file-err tls-str] (if (not= :yasp/none tls-file)
+                                   (if (and (string? tls-file) (.exists (io/file tls-file)))
+                                     [false (slurp tls-file)]
+                                     (do
+                                       (log/error "Missing tls-file" tls-file "or unhandled type")
+                                       [true (str "missing-tls-file")]))
+                                   [false tls-str])
+          cfg (assoc cfg :tls-str tls-str)]
+      (if-let [tls-error (if tls-file-err
+                           {:res     "tls-config-error"
+                            :payload tls-str}
+                           (when (not= tls-str :yasp/none)
+                             (locking state
+                               (when (false? (get @state :tls-verified? false))
+                                 (try
+                                   (tls/ssl-context-or-throw tls-str nil)
+                                   (swap! state assoc :tls-verified? true)
+                                   (log/info "TLS server context verified")
+                                   nil
+                                   (catch Throwable t
+                                     (log/error "TLS configuration error:" (ex-message t))
+                                     {:res     "tls-config-error"
+                                      :payload (str "Message: " (ex-message t))}))))))]
+        tls-error
+        (cond (= "connect" op)
+              (handle-connect cfg data)
 
-            (= "close" op)
-            (handle-close cfg data)
+              (= "close" op)
+              (handle-close cfg data)
 
-            (= "send" op)
-            (handle-send cfg data)
+              (= "send" op)
+              (handle-send cfg data)
 
-            (= "ping" op)
-            {:res "pong"}
+              (= "ping" op)
+              {:res "pong"}
 
-            :else
-            (throw (IllegalStateException. (str "Unexpected op: " (pr-str op))))))
+              :else
+              (throw (IllegalStateException. (str "Unexpected op: " (pr-str op)))))))
     (catch Throwable t
       (log/error "Unexpected error:" (ex-message t))
       (log/error "Root cause:" (ex-message (st/root-cause t)))

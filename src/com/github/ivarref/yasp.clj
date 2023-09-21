@@ -52,11 +52,12 @@
   The client may override this setting when connecting.
   Default value is 65536.
   "
-  [{:keys [allow-connect? tls-str socket-timeout connect-timeout chunk-size]
+  [{:keys [allow-connect? tls-str tls-file socket-timeout connect-timeout chunk-size]
     :or   {socket-timeout  100
            connect-timeout 3000
            chunk-size      65536
-           tls-str         :yasp/none}
+           tls-str         :yasp/none
+           tls-file        :yasp/none}
     :as   cfg}
    data]
   (assert (map? data) "Expected data to be a map")
@@ -70,7 +71,8 @@
       :chunk-size (get cfg :chunk-size chunk-size)
       :socket-timeout socket-timeout
       :connect-timeout connect-timeout
-      :tls-str tls-str)
+      :tls-str tls-str
+      :tls-file tls-file)
     data))
 
 (defn close!

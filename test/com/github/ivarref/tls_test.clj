@@ -109,6 +109,23 @@
       (finally
         (yasp/close! st)))))
 
+(t/deftest bad-tls-str-server-3
+  (let [st (atom {})
+        proxy-cfg {:state          st
+                   :allow-connect? (constantly true)
+                   :now-ms         0
+                   :session        "1"
+                   :tls-file       "missing.keys"
+                   :tls-port       1919}]
+    (try
+      (with-open [remote (s/start-server! (atom {}) {:local-port 9999} s/echo-handler)]
+        (t/is (= {:res     "tls-config-error"
+                  :payload "missing-tls-file"}
+                 (yasp/proxy! proxy-cfg {:op      "connect"
+                                         :payload (u/pr-str-safe {:host "127.0.0.1" :port @remote})}))))
+      (finally
+        (yasp/close! st)))))
+
 (t/deftest bad-tls-client
   (let [st (atom {})
         kp1 (gen-key-pair)
