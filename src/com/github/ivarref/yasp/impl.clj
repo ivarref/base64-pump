@@ -149,6 +149,7 @@
                              (try
                                (tls/ssl-context-or-throw tls-str nil)
                                (swap! state assoc :tls-verified? true)
+                               (log/info "TLS server context verified")
                                nil
                                (catch Throwable t
                                  (log/error "TLS configuration error:" (ex-message t))
