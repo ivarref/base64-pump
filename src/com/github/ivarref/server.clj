@@ -140,6 +140,8 @@
 (defn start-server!
   "
   cfg: Configuration map with the keys:
+
+  * `tls-context`: TLS context (if any) to use.
   * `socket-timeout`: Socket timeout for read operations in milliseconds. Default: 100 ms.
 
   Arguments:

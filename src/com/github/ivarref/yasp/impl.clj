@@ -145,10 +145,10 @@
     (expire-connections! state (:now-ms cfg))
     (if-let [tls-error (when (not= tls-str :yasp/none)
                          (locking state
-                           (when (nil? (get @state :tls-context))
+                           (when (false? (get @state :tls-verified? false))
                              (try
-                               (let [tls-context (tls/ssl-context-or-throw tls-str nil)]
-                                 (swap! state assoc :tls-context tls-context))
+                               (tls/ssl-context-or-throw tls-str nil)
+                               (swap! state assoc :tls-verified? true)
                                nil
                                (catch Throwable t
                                  (log/error "TLS configuration error:" (ex-message t))
