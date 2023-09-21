@@ -90,9 +90,7 @@
                    :tls-str        nil
                    :tls-port       1919}]
     (try
-      (with-open [remote (s/start-server! (atom {}) {:local-port 9999} s/echo-handler)]
-        (t/is (= "error" (:res (yasp/proxy! proxy-cfg {:op      "connect"
-                                                       :payload (u/pr-str-safe {:host "127.0.0.1" :port @remote})})))))
+      (t/is (= "tls-config-error" (:res (yasp/proxy! proxy-cfg {:op "ping"}))))
       (finally
         (yasp/close! st)))))
 
@@ -106,8 +104,8 @@
                    :tls-port       1919}]
     (try
       (with-open [remote (s/start-server! (atom {}) {:local-port 9999} s/echo-handler)]
-        (t/is (= "error" (:res (yasp/proxy! proxy-cfg {:op      "connect"
-                                                       :payload (u/pr-str-safe {:host "127.0.0.1" :port @remote})})))))
+        (t/is (= "tls-config-error" (:res (yasp/proxy! proxy-cfg {:op      "connect"
+                                                                  :payload (u/pr-str-safe {:host "127.0.0.1" :port @remote})})))))
       (finally
         (yasp/close! st)))))
 

@@ -1,13 +1,20 @@
 (ns com.github.ivarref.yasp
-  (:require [com.github.ivarref.yasp.impl :as impl])
-  (:refer-clojure :exclude [future]))                       ; no threads used :-)
+  (:require [com.github.ivarref.yasp.impl :as impl]))
 
 (defonce default-state (atom {}))
 
 (defn proxy!
   "Do the proxying!
 
-  Move bytes from `data` to the requested remote host and port.
+  Move data to the requested remote host and port.
+
+  This function should be invoked by the web server upon receiving a JSON HTTP POST request.
+
+  The first argument, `cfg`, should be controlled by the server side.
+
+  The second argument, `data`, should be the JSON request in the form of a map
+  with the keys :op, :session, :payload, etc.
+
 
   Arguments
   =========

@@ -4,6 +4,7 @@
             [clojure.stacktrace :as st]
             [clojure.tools.logging :as log]
             [com.github.ivarref.server :as server]
+            [com.github.ivarref.yasp.tls :as tls]
             [com.github.ivarref.yasp.utils :as u])
   (:import (java.io BufferedInputStream BufferedOutputStream InputStream)
            (java.net ConnectException InetSocketAddress Socket SocketTimeoutException UnknownHostException)))
@@ -137,25 +138,37 @@
     {:res "unknown-session"}))
 
 (defn proxy-impl
-  [{:keys [state] :as cfg} {:keys [op session] :as data}]
+  [{:keys [state tls-str] :as cfg} {:keys [op session] :as data}]
   (try
     (assert (some? state))
     (assert (string? op) "Expected :op to be a string")
     (expire-connections! state (:now-ms cfg))
-    (cond (= "connect" op)
-          (handle-connect cfg data)
+    (if-let [tls-error (when (not= tls-str :yasp/none)
+                         (locking state
+                           (when (nil? (get @state :tls-context))
+                             (try
+                               (let [tls-context (tls/ssl-context-or-throw tls-str nil)]
+                                 (swap! state assoc :tls-context tls-context))
+                               nil
+                               (catch Throwable t
+                                 (log/error "TLS configuration error:" (ex-message t))
+                                 {:res     "tls-config-error"
+                                  :payload (str "Message: " (ex-message t))})))))]
+      tls-error
+      (cond (= "connect" op)
+            (handle-connect cfg data)
 
-          (= "close" op)
-          (handle-close cfg data)
+            (= "close" op)
+            (handle-close cfg data)
 
-          (= "send" op)
-          (handle-send cfg data)
+            (= "send" op)
+            (handle-send cfg data)
 
-          (= "ping" op)
-          {:res "pong"}
+            (= "ping" op)
+            {:res "pong"}
 
-          :else
-          (throw (IllegalStateException. (str "Unexpected op: " (pr-str op)))))
+            :else
+            (throw (IllegalStateException. (str "Unexpected op: " (pr-str op))))))
     (catch Throwable t
       (log/error "Unexpected error:" (ex-message t))
       (log/error "Root cause:" (ex-message (st/root-cause t)))
