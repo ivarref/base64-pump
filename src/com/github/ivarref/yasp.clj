@@ -11,10 +11,12 @@
   This function should be invoked by the web server upon receiving a JSON HTTP POST request.
 
   The first argument, `cfg`, should be controlled by the server side.
+  It contains details about which remote hosts can be accessed, whether
+  to require mTLS, etc. See details below for what's possible.
 
   The second argument, `data`, should be the JSON request in the form of a map
   with the keys :op, :session, :payload, etc. This value should originate from
-  the yasp client.
+  the yasp client. The details are internal to yasp.
 
   Arguments
   =========
