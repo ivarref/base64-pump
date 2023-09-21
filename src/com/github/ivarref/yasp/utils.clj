@@ -128,7 +128,7 @@
         (throw (ex-info (str "Still " v " active future(s)") {:count v})))
       (log/debug "All futures exited. Max was:" @*max-active-futures*))))
 
-(defn with-fut [f]
+(defn with-futures-check [f]
   (let [cnt (atom 0)
         max-count (atom 0)
         fut-map (atom {})]

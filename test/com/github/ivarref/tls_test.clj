@@ -15,7 +15,7 @@
 
 (set! *warn-on-reflection* true)
 
-(t/use-fixtures :each u/with-fut)
+(t/use-fixtures :each u/with-futures-check)
 
 #_(clj-commons.pretty.repl/install-pretty-exceptions)
 
