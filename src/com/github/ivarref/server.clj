@@ -169,11 +169,16 @@
     false))
 
 (defn pump-socks [^Socket src ^Socket dst]
-  (with-open [in (BufferedInputStream. (.getInputStream src))
-              out (BufferedOutputStream. (.getOutputStream dst))]
-    (loop []
-      (when (pump in out)
-        (recur)))))
+  (try
+    (with-open [in (BufferedInputStream. (.getInputStream src))
+                out (BufferedOutputStream. (.getOutputStream dst))]
+      (loop []
+        (when (pump in out)
+          (recur))))
+    (catch Throwable t
+      (if (or (.isClosed src) (.isClosed dst))
+        (log/debug t "Error in pump-socks:" (ex-message t))
+        (log/warn t "Error in pump-socks:" (ex-message t))))))
 
 (defn tls-handler [my-id state ^Socket sock host port connect-timeout socket-timeout]
   (try
