@@ -13,8 +13,8 @@
   The first argument, `cfg`, should be controlled by the server side.
 
   The second argument, `data`, should be the JSON request in the form of a map
-  with the keys :op, :session, :payload, etc.
-
+  with the keys :op, :session, :payload, etc. This value should originate from
+  the yasp client.
 
   Arguments
   =========
@@ -28,6 +28,16 @@
     (= 22))
   This key is required.
 
+  `:tls-str`: a String containing the concatenation of the root CA,
+  the server CA and the server private key.
+  If `nil` or an empty string is given, yasp will assume that
+  the server is misconfigured.
+  If this value is given, yasp will first send the received
+  bytes to a mTLS server. The mTLS server's connection handler
+  will then proxy the decoded bytes to the requested remote.
+  The default value for `:tls-str` is `:yasp/none`, meaning that no mTLS termination
+  will be performed.
+
   `:socket-timeout`: Socket timeout for read operations in milliseconds.
   The client may override this setting when connecting.
    Default value is 100.
@@ -40,7 +50,7 @@
   The client may override this setting when connecting.
   Default value is 65536.
   "
-  [{:keys [allow-connect? socket-timeout connect-timeout chunk-size tls-str]
+  [{:keys [allow-connect? tls-str socket-timeout connect-timeout chunk-size]
     :or   {socket-timeout  100
            connect-timeout 3000
            chunk-size      65536
