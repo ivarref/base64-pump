@@ -59,10 +59,12 @@
                :payload (str "unknown host: " host)})
             (catch SocketTimeoutException ste
               (log/warn "Socket timeout during connect:" (ex-message ste))
-              {:res "connect-error"})
+              {:res     "connect-error"
+               :payload (str "SocketTimeoutException: " (ex-message ste))})
             (catch ConnectException ce
               (log/warn "Connect exception during connect:" (ex-message ce))
-              {:res "connect-error"})
+              {:res     "connect-error"
+               :payload (str "ConnectException: " (ex-message ce))})
             (catch Throwable t
               (log/error t "Unhandled exception in connect:" (ex-message t))
               (log/error "Error message:" (ex-message t) "of type" (str (class t)))
