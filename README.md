@@ -6,7 +6,7 @@ It can also do mutual TLS termination.
 
 Yasp requires that your Clojure web server can receive a HTTP POST JSON
 request and produce a JSON response. 
-The server component has only a single dependency: `clojure.tools.logging`.
+The server component otherwise only has a single dependency: `clojure.tools.logging`.
 
 ## Overview
 
@@ -17,4 +17,34 @@ sequenceDiagram
     yasp-client-tls->web server (yasp): HTTP POST JSON
     web server (yasp)->>yasp-server-mTLS-termination (optional): mTLS TCP
     yasp-server-mTLS-termination (optional)->>remote destination (e.g. nREPL server): TCP
+```
+
+## Installation
+
+Add 
+```clojure
+{:deps ...
+       {com.github.ivarref/yasp {:...}}
+ :aliases {...
+           :generate-keys {:deps {com.github.ivarref/locksmith {:mvn/version "0.1.6"}}
+                           :exec-fn   com.github.ivarref.locksmith/write-certs!
+                           :exec-args {:duration-days 365}}
+           :proxy {:deps {com.github.ivarref/yasp-client {:...}}
+                   :exec-fn   com.github.ivarref.yasp-client/start-server!
+                   :exec-args {:endpoint    "https://my.server.example.com/proxy-endpoint"
+                               :local-port  7777
+                               :remote-host "127.0.0.1"
+                               :remote-port 7777
+                               :tls-file "client.keys"}}
+           }}
+```
+to your `deps.edn` file.
+
+## Usage
+
+Add an endpoint to your exposed web server that forwards the data
+to yasp:
+
+```clojure
+
 ```

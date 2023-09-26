@@ -1,5 +1,6 @@
 (ns com.github.ivarref.yasp
-  (:require [com.github.ivarref.yasp.impl :as impl]))
+  (:require [clojure.tools.logging :as log]
+            [com.github.ivarref.yasp.impl :as impl]))
 
 (defonce default-state (atom {}))
 
@@ -75,8 +76,29 @@
       :tls-file tls-file)
     data))
 
+(defn tls-proxy!
+  "Do the proxying!
+
+  Same arguments as `proxy!`, but enforces that either
+  `:tls-file` or `:tls-str` is set."
+  [{:keys [allow-connect? tls-str tls-file socket-timeout connect-timeout chunk-size]
+    :or   {socket-timeout  100
+           connect-timeout 3000
+           chunk-size      65536
+           tls-str         :yasp/none
+           tls-file        :yasp/none}
+    :as   cfg}
+   data]
+  (if (and (= tls-str :yasp/none) (= tls-file :yasp/none))
+    (do
+      (log/error "Bad TLS configuration, returning tls-config-error")
+      {:res     "tls-config-error"
+       :payload ":tls-str nor :tls-file is unset"})
+    (proxy! cfg data)))
+
 (defn close!
   ([]
    (close! default-state))
   ([state]
    (impl/close! state)))
+
