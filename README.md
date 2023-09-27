@@ -26,16 +26,16 @@ Add
 {:deps ...
        {com.github.ivarref/yasp {:...}}
  :aliases {...
-           :generate-keys {:deps {com.github.ivarref/locksmith {:mvn/version "0.1.6"}}
+           :generate-keys {:deps      {com.github.ivarref/locksmith {:mvn/version "0.1.6"}}
                            :exec-fn   com.github.ivarref.locksmith/write-certs!
                            :exec-args {:duration-days 365}}
-           :proxy {:deps {com.github.ivarref/yasp-client {:...}}
+           :proxy {:deps      {com.github.ivarref/yasp-client {:git/sha "..."}}
                    :exec-fn   com.github.ivarref.yasp-client/start-server!
-                   :exec-args {:endpoint    "https://my.server.example.com/proxy-endpoint"
-                               :local-port  7777
+                   :exec-args {:endpoint    "http://localhost:8080/proxy"
                                :remote-host "127.0.0.1"
                                :remote-port 7777
-                               :tls-file "client.keys"}}
+                               :local-port  8888
+                               :tls-file    "client.keys"}}
            }}
 ```
 to your `deps.edn` file.
