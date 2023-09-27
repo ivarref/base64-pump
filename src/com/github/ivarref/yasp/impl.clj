@@ -51,6 +51,8 @@
                                                                       :out         out
                                                                       :last-access now-ms
                                                                       :chunk-size  chunk-size})))
+              (log/info "Accepted connection for"
+                        (into (sorted-map) (select-keys client-config [:host :port])))
               {:res     "ok-connect"
                :session session})
             (catch UnknownHostException uhe
@@ -73,7 +75,7 @@
                              " of type "
                              (str (class t)))}))))
       (do
-        (log/warn "Returning disallow-connect for" (select-keys client-config [:host :port]))
+        (log/warn "Returning disallow-connect for" (into (sorted-map) (select-keys client-config [:host :port])))
         {:res "disallow-connect"}))))
 
 (defn close-session! [state session-id]
