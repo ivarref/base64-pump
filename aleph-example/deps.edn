@@ -1,7 +1,7 @@
 {:deps    {aleph/aleph               {:mvn/version "0.7.0-alpha1"}
            cheshire/cheshire         {:mvn/version "5.12.0"}
            nrepl/nrepl               {:mvn/version "1.1.0-alpha1"}
-           com.github.ivarref/yasp   {:local/root "/home/ire/code2/yasp"}
+           com.github.ivarref/yasp   {:git/sha "1a6f66fe7711e358de3fa994a3e57ad83ac0f45b"}
            org.clojure/tools.logging {:mvn/version "1.2.4"}
            org.slf4j/slf4j-simple    {:mvn/version "2.0.9"}}
  :paths   ["src"]
@@ -10,7 +10,7 @@
                            :exec-fn   com.github.ivarref.locksmith/write-certs!
                            :exec-args {:duration-days 365}}
            :server        {:exec-fn demo-server/run-server}
-           :proxy         {:deps      {com.github.ivarref/yasp-client {:local/root "/home/ire/code2/yasp-client"}}
+           :proxy         {:deps      {com.github.ivarref/yasp-client {:git/sha "d3a111d8b2e2e40e7dfffcd3902c5b2ec4d2380b"}}
                            :exec-fn   com.github.ivarref.yasp-client/start-server!
                            :exec-args {:endpoint    "http://localhost:8080/proxy"
                                        :remote-host "127.0.0.1"
