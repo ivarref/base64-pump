@@ -4,3 +4,6 @@ target/
 .clj-kondo/.cache
 .nrepl-port
 .idea/
+aleph-example/.yasp-port
+aleph-example/client.keys
+aleph-example/server.keys

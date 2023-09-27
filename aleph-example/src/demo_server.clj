@@ -11,7 +11,7 @@
 (def proxy-config
   {:allow-connect? (fn [{:keys [host port]}]
                      (and (= host "127.0.0.1")
-                          (= port "7777")))
+                          (= port 7777)))
    :tls-file "server.keys"})
 
 (defn start-nrepl! []

@@ -72,7 +72,9 @@
                :payload (str (ex-message t)
                              " of type "
                              (str (class t)))}))))
-      {:res "disallow-connect"})))
+      (do
+        (log/warn "Returning disallow-connect for" (select-keys client-config [:host :port]))
+        {:res "disallow-connect"}))))
 
 (defn close-session! [state session-id]
   (if-let [sess (get-in @state [:sessions session-id])]
