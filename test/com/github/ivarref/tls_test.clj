@@ -15,7 +15,13 @@
 
 (set! *warn-on-reflection* true)
 
-(t/use-fixtures :each u/with-futures-check)
+(defonce lock (Object.))
+
+(defn single-threaded [f]
+  (locking lock
+    (f)))
+
+(t/use-fixtures :each (t/compose-fixtures single-threaded u/with-futures-check))
 
 #_(clj-commons.pretty.repl/install-pretty-exceptions)
 
