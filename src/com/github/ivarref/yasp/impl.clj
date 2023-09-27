@@ -52,7 +52,11 @@
                                                                       :last-access now-ms
                                                                       :chunk-size  chunk-size})))
               (log/info "Accepted connection for"
-                        (into (sorted-map) (select-keys client-config [:host :port])))
+                        (into (sorted-map) (select-keys client-config [:host :port]))
+                        "mTLS"
+                        (if (not= :yasp/none tls-str)
+                          "enabled"
+                          "disabled"))
               {:res     "ok-connect"
                :session session})
             (catch UnknownHostException uhe

@@ -8,16 +8,9 @@
            (java.net InetSocketAddress)
            (java.nio.charset StandardCharsets)))
 
-(def proxy-config
-  {:allow-connect? (fn [{:keys [host port]}]
-                     (and (= host "127.0.0.1")
-                          (= port 7777)))
-   :tls-file "server.keys"})
-
 (defn start-nrepl! []
   (try
-    (nrepl/start-server :port 7777
-                        :bind "127.0.0.1")
+    (nrepl/start-server :port 7777)
     (log/info "nREPL server running at 127.0.0.1:7777")
     (catch Throwable t
       (log/error t "Could not start nREPL server" (ex-message t)))))
@@ -29,7 +22,10 @@
      :headers {"content-type" "application/json"}
      :body    (json/generate-string
                 (yasp/tls-proxy!
-                  proxy-config
+                  {:allow-connect? (fn [{:keys [host port]}]
+                                     (and (= host "127.0.0.1")
+                                          (= port 7777)))
+                   :tls-file       "server.keys"}
                   (json/decode-stream
                     (InputStreamReader. ^InputStream body StandardCharsets/UTF_8) keyword)))}
     (= "/" uri)

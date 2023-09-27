@@ -162,7 +162,7 @@
 (defonce id (atom 0))
 
 (defn pump [^InputStream is ^OutputStream os]
-  (if-let [chunk (u/read-max-bytes is 64000)]
+  (if-let [chunk (u/read-max-bytes is 65536)]
     (do
       (u/write-bytes chunk os)
       true)
