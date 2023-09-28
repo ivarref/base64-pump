@@ -154,12 +154,25 @@
     (assert (some? state))
     (assert (string? op) "Expected :op to be a string")
     (expire-connections! state (:now-ms cfg))
-    (let [[tls-file-err tls-str] (if (not= :yasp/none tls-file)
-                                   (if (and (string? tls-file) (.exists (io/file tls-file)))
-                                     [false (slurp tls-file)]
-                                     (do
-                                       (log/error "Missing tls-file" tls-file "or unhandled type")
-                                       [true (str "missing-tls-file")]))
+    (let [[tls-file-err tls-str] (cond
+                                   (= :yasp/none tls-file)
+                                   [false tls-str]
+
+                                   (and (string? tls-file) (.exists (io/file tls-file)))
+                                   [false (slurp tls-file)]
+
+                                   (and (string? tls-file) (some? (io/resource tls-file)))
+                                   [false (slurp (io/resource tls-file))]
+
+                                   (string? tls-file)
+                                   (do
+                                     (log/error (str "Could not read tls file "
+                                                     "'"
+                                                     tls-file
+                                                     "'"))
+                                     [true "missing-tls-file"])
+
+                                   :else
                                    [false tls-str])
           cfg (assoc cfg :tls-str tls-str)]
       (if-let [tls-error (if tls-file-err
