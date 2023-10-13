@@ -15,6 +15,11 @@
 (comment
   (set! *warn-on-reflection* true))
 
+(defn quote [s]
+  (str "'"
+       (str s)
+       "'"))
+
 (defn handle-connect [{:keys [state allow-connect? connect-timeout session now-ms socket-timeout chunk-size tls-str]
                        :as   cfg}
                       {:keys [payload]}]
@@ -62,22 +67,30 @@
             (catch UnknownHostException uhe
               (log/warn "Unknown host exception during connect:" (ex-message uhe))
               {:res     "connect-error"
-               :payload (str "unknown host: " host)})
+               :payload (str "unknown host: " host
+                             "\nremote-host: " (quote host)
+                             "\nremote-port: " (quote port))})
             (catch SocketTimeoutException ste
               (log/warn "Socket timeout during connect:" (ex-message ste))
               {:res     "connect-error"
-               :payload (str "SocketTimeoutException: " (ex-message ste))})
+               :payload (str "SocketTimeoutException: " (ex-message ste)
+                             "\nremote-host: " (quote host)
+                             "\nremote-port: " (quote port))})
             (catch ConnectException ce
               (log/warn "Connect exception during connect:" (ex-message ce))
               {:res     "connect-error"
-               :payload (str "ConnectException: " (ex-message ce))})
+               :payload (str "ConnectException: " (ex-message ce) ", root message: " (ex-message (st/root-cause ce))
+                             "\nremote-host: " (quote host)
+                             "\nremote-port: " (quote port))})
             (catch Throwable t
               (log/error t "Unhandled exception in connect:" (ex-message t))
               (log/error "Error message:" (ex-message t) "of type" (str (class t)))
               {:res     "connect-error"
                :payload (str (ex-message t)
                              " of type "
-                             (str (class t)))}))))
+                             (str (class t))
+                             "\nremote-host: " (quote host)
+                             "\nremote-port: " (quote port))}))))
       (do
         (log/warn "Returning disallow-connect for" (into (sorted-map) (select-keys client-config [:host :port])))
         {:res "disallow-connect"}))))
