@@ -15,10 +15,8 @@
 (comment
   (set! *warn-on-reflection* true))
 
-(defn quote [s]
-  (str "'"
-       (str s)
-       "'"))
+(defn str-quote [s]
+  (str "'" (str s) "'"))
 
 (defn handle-connect [{:keys [state allow-connect? connect-timeout session now-ms socket-timeout chunk-size tls-str]
                        :as   cfg}
@@ -39,10 +37,9 @@
               connect-timeout (get client-config :connect-timeout connect-timeout)
               chunk-size (get client-config :chunk-size chunk-size)
               old-port port
-              port (if (not= :yasp/none tls-str)
-                     (deref (get-in @state [:tls-proxy host port :proxy]))
-                     port)
-              host (if (some? tls-str) "127.0.0.1" host)]
+              [host port] (if (not= :yasp/none tls-str)
+                            ["127.0.0.1" (deref (get-in @state [:tls-proxy host port :proxy]))]
+                            [host port])]
           (when (not= old-port port)
             (log/debug "Overriding port from" old-port "to" port))
           (.setSoTimeout sock socket-timeout)
@@ -68,20 +65,20 @@
               (log/warn "Unknown host exception during connect:" (ex-message uhe))
               {:res     "connect-error"
                :payload (str "unknown host: " host
-                             "\nremote-host: " (quote host)
-                             "\nremote-port: " (quote port))})
+                             "\nremote-host: " (str-quote host)
+                             "\nremote-port: " (str-quote port))})
             (catch SocketTimeoutException ste
               (log/warn "Socket timeout during connect:" (ex-message ste))
               {:res     "connect-error"
                :payload (str "SocketTimeoutException: " (ex-message ste)
-                             "\nremote-host: " (quote host)
-                             "\nremote-port: " (quote port))})
+                             "\nremote-host: " (str-quote host)
+                             "\nremote-port: " (str-quote port))})
             (catch ConnectException ce
               (log/warn "Connect exception during connect:" (ex-message ce))
               {:res     "connect-error"
                :payload (str "ConnectException: " (ex-message ce) ", root message: " (ex-message (st/root-cause ce))
-                             "\nremote-host: " (quote host)
-                             "\nremote-port: " (quote port))})
+                             "\nremote-host: " (str-quote host)
+                             "\nremote-port: " (str-quote port))})
             (catch Throwable t
               (log/error t "Unhandled exception in connect:" (ex-message t))
               (log/error "Error message:" (ex-message t) "of type" (str (class t)))
@@ -89,8 +86,8 @@
                :payload (str (ex-message t)
                              " of type "
                              (str (class t))
-                             "\nremote-host: " (quote host)
-                             "\nremote-port: " (quote port))}))))
+                             "\nremote-host: " (str-quote host)
+                             "\nremote-port: " (str-quote port))}))))
       (do
         (log/warn "Returning disallow-connect for" (into (sorted-map) (select-keys client-config [:host :port])))
         {:res "disallow-connect"}))))
