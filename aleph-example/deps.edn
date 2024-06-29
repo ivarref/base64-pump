@@ -1,7 +1,7 @@
 {:deps    {aleph/aleph               {:mvn/version "0.7.0-alpha1"}
            cheshire/cheshire         {:mvn/version "5.12.0"}
            nrepl/nrepl               {:mvn/version "1.1.0-alpha1"}
-           com.github.ivarref/yasp   {:git/sha "1a6f66fe7711e358de3fa994a3e57ad83ac0f45b"}
+           com.github.ivarref/yasp   {:git/sha "e76b575e9010f284c01a72ae10571de0a5095b3f"}
            org.clojure/tools.logging {:mvn/version "1.2.4"}
            org.slf4j/slf4j-simple    {:mvn/version "2.0.9"}}
  :paths   ["src"]
