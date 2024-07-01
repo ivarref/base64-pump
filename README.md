@@ -1,7 +1,7 @@
 # yasp
 
 Yasp and its companion yasp-client is proxy that does
-TCP over HTTP, encoded as JSON.
+TCP over HTTP(S), encoded as JSON.
 It can also do mutual TLS termination.
 
 Yasp requires that your Clojure web server can receive a HTTP POST JSON
@@ -19,14 +19,16 @@ sequenceDiagram
     yasp-server-mTLS-termination (optional)->>remote destination (e.g. nREPL server): TCP
 ```
 
+## Examples
+
+[aleph example](https://github.com/ivarref/yasp/tree/main/aleph-example).
+
 ## Installation
 
 Add 
 ```clojure
-{:deps ...
-       {com.github.ivarref/yasp {:...}}
- :aliases {...
-           :generate-keys {:deps      {com.github.ivarref/locksmith {:mvn/version "0.1.6"}}
+{:deps {com.github.ivarref/yasp {:...}}
+ :aliases {:generate-keys {:deps      {com.github.ivarref/locksmith {:mvn/version "0.1.6"}}
                            :exec-fn   com.github.ivarref.locksmith/write-certs!
                            :exec-args {:duration-days 365}}
            :proxy {:deps      {com.github.ivarref/yasp-client {:git/sha "..."}}
