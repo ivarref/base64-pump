@@ -45,7 +45,7 @@ to your `deps.edn` file.
 ## Usage
 
 Add an endpoint to your exposed web server that forwards the data
-to yasp. Example below is for pure for aleph using cheshire for json encoding/decoding:
+to yasp. The example below is for pure for aleph using cheshire for json encoding/decoding:
 
 ```clojure
 (defn handler [{:keys [uri body request-method]}]

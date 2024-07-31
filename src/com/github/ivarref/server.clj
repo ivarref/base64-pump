@@ -74,6 +74,23 @@
     (finally
       (log/debug "Echo handler exiting"))))
 
+(defn consume-only-handler [{:keys [^Socket sock closed?]}]
+  (try
+    (with-open [in (BufferedInputStream. (.getInputStream sock))
+                _out (BufferedOutputStream. (.getOutputStream sock))]
+      (loop []
+        (if-let [_chunk (u/read-max-bytes in 1024)]
+          (do
+            (recur))
+          (do
+            (log/debug "Echo handler: EOF reached")))))
+    (catch Throwable t
+      (if-not @closed?
+        (log/error t "Echo handler error:" (ex-message t))
+        (log/debug t "Echo handler error:" (ex-message t))))
+    (finally
+      (log/debug "Echo handler exiting"))))
+
 (defn server-accept-loop [^ServerSocket ss {:keys [socket-timeout state] :as _cfg} handler]
   (loop []
     (if (.isClosed ss)

@@ -23,9 +23,11 @@
     (fn [host-and-port] (contains? allow-connect? host-and-port))
     allow-connect?))
 
+(def valid-ops #{"connect" "send" "close" "ping"})
+
 (defn assert-valid-op! [op]
   (assert (and (string? op)
-               (contains? #{"connect" "close" "send" "ping"} op))
+               (contains? valid-ops op))
           "Expected :op to be one of connect, close, send or ping")
   op)
 

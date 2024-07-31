@@ -21,7 +21,7 @@
       (t/is (= {:res "disallow-connect"}
                (yasp/proxy! {:state          st
                              :allow-connect? #{}
-                             :now-ms         0
+                             :now-ms         1
                              :session        "1"}
                             {:op      "connect"
                              :payload (u/pr-str-safe {:host "localhost" :port @ss})}))))))
@@ -33,7 +33,7 @@
                 :session "1"}
                (yasp/proxy! {:state          st
                              :allow-connect? #{{:host "localhost" :port @ss}}
-                             :now-ms         0
+                             :now-ms         1
                              :session        "1"}
                             {:op      "connect"
                              :payload (u/pr-str-safe {:host "localhost" :port @ss})}))))
@@ -50,7 +50,7 @@
                 :session "1"}
                (yasp/proxy! {:state          st
                              :allow-connect? #{{:host "localhost" :port @ss}}
-                             :now-ms         0
+                             :now-ms         1
                              :session        "1"}
                             {:op      "connect"
                              :payload (u/pr-str-safe {:host "localhost" :port @ss})})))
@@ -71,34 +71,55 @@
 (def hello-world-base64 (u/bytes->base64-str hello-world-bytes))
 
 (defn send-and-read! [cfg data read-times]
-  (let [received (atom {})
-        add-recv! (fn [resp]
-                    (swap! received #(update %1 %2 (fnil inc 0)) resp))]
-    (add-recv! (yasp/proxy! cfg data))
-    (dotimes [_n read-times]
-      (add-recv! (yasp/proxy! cfg (assoc data :payload ""))))
-    @received))
+  (let [received (atom [])]
+    (yasp/proxy! cfg data)
+    #_(dotimes [_n read-times]
+        (swap! received conj (yasp/proxy! cfg (assoc data :payload ""))))
+    #_@received))
 
 (t/deftest send-test
   (let [st (atom {})]
     (with-open [ss (s/start-server! (atom {}) {} s/echo-handler)]
-      (let [cfg {:state          st
-                 :allow-connect? #{{:host "localhost" :port @ss}}
-                 :now-ms         0
-                 :session        "1"}]
+      (let [cfg {:state             st
+                 :allow-connect?    #{{:host "localhost" :port @ss}}
+                 :now-ms            1
+                 :session           "1"
+                 :socket-timeout-ms 3000}]
+        (t/is (= {:res     "ok-connect"
+                  :session "1"}
+                 (yasp/proxy! cfg {:op      "connect"
+                                   :payload (u/pr-str-safe {:host "localhost" :port @ss})})))
+        (t/is (map? (get-in @st [:sessions "1"])))
+        (let [^Socket sock (get-in @st [:sessions "1" :socket])]
+          (assert (instance? Socket sock))
+          (t/is (= 3000 (.getSoTimeout sock))))
+        (t/is (= {:res "ok-send", :payload "SGVsbG8gV29ybGQ="}
+                 (yasp/proxy! cfg
+                              {:op      "send"
+                               :session "1"
+                               :hasmore "false"             ; make sure the underlying stream is flushed
+                               :payload hello-world-base64})))))))
+
+(t/deftest no-reply-test
+  (let [st (atom {})]
+    (with-open [ss (s/start-server! (atom {}) {} s/consume-only-handler)]
+      (let [cfg {:state             st
+                 :allow-connect?    #{{:host "localhost" :port @ss}}
+                 :now-ms            1
+                 :session           "1"
+                 :socket-timeout-ms 500}]
         (t/is (= {:res     "ok-connect"
                   :session "1"}
                  (yasp/proxy! cfg {:op      "connect"
                                    :payload (u/pr-str-safe {:host "localhost" :port @ss})})))
         (t/is (map? (get-in @st [:sessions "1"])))
 
-        (t/is (= {{:res "ok-send", :payload ""}                 10
-                  {:res "ok-send", :payload "SGVsbG8gV29ybGQ="} 1}
-                 (send-and-read! cfg
-                                 {:op      "send"
-                                  :session "1"
-                                  :payload hello-world-base64}
-                                 10)))))))
+        (t/is (= {:res "ok-send", :payload ""}
+                 (yasp/proxy! cfg
+                              {:op      "send"
+                               :session "1"
+                               :hasmore "false"
+                               :payload hello-world-base64})))))))
 
 (defn say-hello [{:keys [^Socket sock closed?]}]
   (try

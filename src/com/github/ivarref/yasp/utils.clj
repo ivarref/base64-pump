@@ -12,6 +12,9 @@
 
 (defonce lock (Object.))
 
+(defn str-quote [s]
+  (str "'" (str s) "'"))
+
 (defn atomic-println [& args]
   (locking lock
     (binding [*out* *err*]

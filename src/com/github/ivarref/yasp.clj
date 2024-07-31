@@ -1,7 +1,10 @@
 (ns com.github.ivarref.yasp
   (:require [clojure.tools.logging :as log]
             [com.github.ivarref.yasp.impl :as impl]
-            [com.github.ivarref.yasp.impl-connect :as impl-connect]))
+            [com.github.ivarref.yasp.impl-connect :as impl-connect]
+            [com.github.ivarref.yasp.impl-send :as impl-send]
+            [com.github.ivarref.yasp.impl-close :as impl-close])
+  (:import (clojure.lang IAtom2)))
 
 (defonce default-state (atom {}))
 
@@ -42,11 +45,11 @@
   The default value for `:tls-str` is `:yasp/none`, meaning that no mTLS termination
   will be performed.
 
-  `:socket-timeout`: Socket timeout for read operations in milliseconds.
+  `:socket-timeout-ms`: Socket timeout for read operations in milliseconds.
   The client may override this setting when connecting.
    Default value is 100.
 
-  `:connect-timeout`: Connect timeout in milliseconds.
+  `:connect-timeout-ms`: Connect timeout in milliseconds.
   The client may override this setting when connecting.
   Default value is 3000.
 
@@ -54,12 +57,12 @@
   The client may override this setting when connecting.
   Default value is 65536.
   "
-  [{:keys [allow-connect? tls-str tls-file socket-timeout connect-timeout chunk-size]
-    :or   {socket-timeout  100
-           connect-timeout 3000
-           chunk-size      65536
-           tls-str         :yasp/none
-           tls-file        :yasp/none}
+  [{:keys [allow-connect? tls-str tls-file socket-timeout-ms connect-timeout-ms chunk-size]
+    :or   {socket-timeout-ms  100
+           connect-timeout-ms 3000
+           chunk-size         65536
+           tls-str            :yasp/none
+           tls-file           :yasp/none}
     :as   cfg}
    {:keys [op] :as data}]
   (assert (map? data) "Expected data to be a map")
@@ -68,36 +71,40 @@
   (let [allow-connect? (impl/allow-connect-to-fn allow-connect?)
         state (get cfg :state default-state)
         now-ms (get cfg :now-ms (System/currentTimeMillis))
-        slim-cfg {:state      state
-                  :now-ms     now-ms
-                  :chunk-size chunk-size}
+        shared-cfg {:state      state
+                    :now-ms     now-ms
+                    :chunk-size chunk-size}
         tls-enabled? (not (and (= tls-str :yasp/none) (= tls-file :yasp/none)))]
+    (assert (instance? IAtom2 state))
     (assert (and (some? allow-connect?)
                  (fn? allow-connect?)) "Expected :allow-connect? to be a function")
+    (assert (pos-int? now-ms))
     (cond (= "ping" op)
           {:res "pong"
            :tls (str tls-enabled?)}
 
-          (= "connect" op)
-          (impl-connect/handle-connect (assoc slim-cfg
-                                         :tls-str tls-str
-                                         :tls-file tls-file
-                                         :connect-timeout connect-timeout
-                                         :socket-timeout socket-timeout
-                                         :session (get cfg :session (str (random-uuid))))
-                                       data))))
+          (and (= "connect" op) (false? tls-enabled?))
+          (impl-connect/handle-connect! (assoc shared-cfg
+                                          :allow-connect? allow-connect?
+                                          :connect-timeout-ms connect-timeout-ms
+                                          :socket-timeout-ms socket-timeout-ms
+                                          :session (get cfg :session (str (random-uuid))))
+                                        data)
+
+          (and (= "send" op) (false? tls-enabled?))
+          (impl-send/handle-send! shared-cfg data)
+
+          (and (= "close" op) (false? tls-enabled?))
+          (impl-close/handle-close! shared-cfg data))))
 
 (defn tls-proxy!
   "Do the proxying!
 
   Same arguments as `proxy!`, but enforces that either
   `:tls-file` or `:tls-str` is set."
-  [{:keys [allow-connect? tls-str tls-file socket-timeout connect-timeout chunk-size]
-    :or   {socket-timeout  100
-           connect-timeout 3000
-           chunk-size      65536
-           tls-str         :yasp/none
-           tls-file        :yasp/none}
+  [{:keys [tls-str tls-file]
+    :or   {tls-str  :yasp/none
+           tls-file :yasp/none}
     :as   cfg}
    data]
   (if (and (= tls-str :yasp/none) (= tls-file :yasp/none))
