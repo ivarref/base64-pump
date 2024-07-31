@@ -19,7 +19,7 @@
 
     (= "/proxy" uri)
     {:status  400
-     :headers {"content-type" "application/json"}
+     :headers {"content-type" "application/json; charset=UTF-8"}
      :body    (cheshire.core/generate-string {:message "Bad Request"})}
 
     (= "/" uri)

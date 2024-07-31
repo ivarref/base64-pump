@@ -57,18 +57,17 @@ to yasp. Example below is for pure for aleph using cheshire for json encoding/de
                 (com.github.ivarref.yasp/proxy!
                   {:allow-connect? (fn [{:keys [host port]}]
                                      (and (= host "127.0.0.1")
-                                          (= port 22)))
-                   :tls-str        server-keys}
+                                          (= port 22)))}
                   (cheshire.core/decode-stream
                     (java.io.InputStreamReader. ^java.io.InputStream body java.nio.charset.StandardCharsets/UTF_8)
                     keyword)))}
 
     (= "/proxy" uri)
     {:status  400
-     :headers {"content-type" "application/json"}
-     :body    (json/generate-string {:message "Bad Request"})}
+     :headers {"content-type" "application/json; charset=UTF-8"}
+     :body    (cheshire.core/generate-string {:message "Bad Request"})}
     
-    ...your other routes here))
+    ...your other routes go here))
 
 (defn start-server! []
   (http/start-server (fn [ctx] (handler ctx))
