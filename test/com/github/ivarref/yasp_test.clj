@@ -114,7 +114,7 @@
   (let [st (atom {})]
     (with-open [ss (s/start-server! (atom {}) {} say-hello)]
       (let [cfg {:state          st
-                 :allow-connect? #{{:host "localhost" :port @ss}}
+                 :allow-connect? (impl/allow-connect-to-fn #{{:host "localhost" :port @ss}})
                  :session        "1"}]
         (t/is (= {:res     "ok-connect"
                   :session "1"}

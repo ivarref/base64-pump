@@ -18,10 +18,21 @@
 (defn str-quote [s]
   (str "'" (str s) "'"))
 
+(defn allow-connect-to-fn [allow-connect?]
+  (if (and allow-connect? (set? allow-connect?))
+    (fn [host-and-port] (contains? allow-connect? host-and-port))
+    allow-connect?))
+
+(defn assert-valid-op! [op]
+  (assert (and (string? op)
+               (contains? #{"connect" "close" "send" "ping"} op))
+          "Expected :op to be one of connect, close, send or ping")
+  op)
+
 (defn handle-connect [{:keys [state allow-connect? connect-timeout session now-ms socket-timeout chunk-size tls-str]
                        :as   cfg}
                       {:keys [payload]}]
-  (assert (some? allow-connect?) "Expected :allow-connect? to be present")
+  (assert (fn? allow-connect?) "Expected :allow-connect? to be a function")
   (assert (string? payload) "Expected :payload to be a string")
   (let [{:keys [host port] :as client-config} (edn/read-string payload)]
     (if (allow-connect? (select-keys client-config [:host :port]))
@@ -159,10 +170,10 @@
     {:res "unknown-session"}))
 
 (defn proxy-impl
-  [{:keys [state tls-str tls-file] :as cfg} {:keys [op session] :as data}]
+  [{:keys [state tls-str tls-file] :as cfg} {:keys [op] :as data}]
   (try
     (assert (some? state))
-    (assert (string? op) "Expected :op to be a string")
+    (assert-valid-op! op)
     (expire-connections! state (:now-ms cfg))
     (let [[tls-file-err tls-str] (cond
                                    (= :yasp/none tls-file)

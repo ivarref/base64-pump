@@ -1,6 +1,7 @@
 (ns com.github.ivarref.yasp
   (:require [clojure.tools.logging :as log]
-            [com.github.ivarref.yasp.impl :as impl]))
+            [com.github.ivarref.yasp.impl :as impl]
+            [com.github.ivarref.yasp.impl-connect :as impl-connect]))
 
 (defonce default-state (atom {}))
 
@@ -28,7 +29,7 @@
   Return `nil` or `false` to block the connection request.
   Example function that allows all connections for port 22:
   (fn [{:keys [_host port]}]
-    (= 22))
+    (= 22 port))
   This key is required.
 
   `:tls-str`: a String containing the concatenation of the root CA,
@@ -60,21 +61,31 @@
            tls-str         :yasp/none
            tls-file        :yasp/none}
     :as   cfg}
-   data]
+   {:keys [op] :as data}]
   (assert (map? data) "Expected data to be a map")
   (assert (contains? data :op) "Expected data to contain :op key")
-  (assert (some? allow-connect?) "Expected :allow-connect? to be present")
-  (impl/proxy-impl
-    (assoc cfg
-      :state (get cfg :state default-state)
-      :now-ms (get cfg :now-ms (System/currentTimeMillis))
-      :session (get cfg :session (str (random-uuid)))
-      :chunk-size (get cfg :chunk-size chunk-size)
-      :socket-timeout socket-timeout
-      :connect-timeout connect-timeout
-      :tls-str tls-str
-      :tls-file tls-file)
-    data))
+  (impl/assert-valid-op! op)
+  (let [allow-connect? (impl/allow-connect-to-fn allow-connect?)
+        state (get cfg :state default-state)
+        now-ms (get cfg :now-ms (System/currentTimeMillis))
+        slim-cfg {:state      state
+                  :now-ms     now-ms
+                  :chunk-size chunk-size}
+        tls-enabled? (not (and (= tls-str :yasp/none) (= tls-file :yasp/none)))]
+    (assert (and (some? allow-connect?)
+                 (fn? allow-connect?)) "Expected :allow-connect? to be a function")
+    (cond (= "ping" op)
+          {:res "pong"
+           :tls (str tls-enabled?)}
+
+          (= "connect" op)
+          (impl-connect/handle-connect (assoc slim-cfg
+                                         :tls-str tls-str
+                                         :tls-file tls-file
+                                         :connect-timeout connect-timeout
+                                         :socket-timeout socket-timeout
+                                         :session (get cfg :session (str (random-uuid))))
+                                       data))))
 
 (defn tls-proxy!
   "Do the proxying!
