@@ -79,8 +79,8 @@ Verify that the endpoint works:
 ```bash
     # assuming your web server is running at 8080 and /proxy forwards to yasp.
     $ curl -X POST http://localhost:8080/proxy -H "Content-Type: application/json" -d '{"op" : "ping"}'
-    {"res":"pong","tls":"false"}
-    # tls will be either "true" or "false"
+    {"res":"pong","tls":"disabled"}
+    # `tls` will be either "valid", "invalid" (your config is broken) or "disabled".
 ```
 
 ## Development

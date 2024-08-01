@@ -179,7 +179,7 @@
       (catch IOException _
         nil))))
 
-(defn- ssl-str-context
+(defn ssl-str-context
   "Given a string of a PKCS8 key, a certificate file and a trusted CA certificate
   used to verify peers, returns an SSLContext."
   [tls-keys-str]

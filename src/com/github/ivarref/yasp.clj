@@ -1,9 +1,10 @@
 (ns com.github.ivarref.yasp
   (:require [clojure.tools.logging :as log]
             [com.github.ivarref.yasp.impl :as impl]
+            [com.github.ivarref.yasp.impl-close :as impl-close]
             [com.github.ivarref.yasp.impl-connect :as impl-connect]
             [com.github.ivarref.yasp.impl-send :as impl-send]
-            [com.github.ivarref.yasp.impl-close :as impl-close])
+            [com.github.ivarref.yasp.tls-check :as tls-check])
   (:import (clojure.lang IAtom2)))
 
 (defonce default-state (atom {}))
@@ -57,12 +58,11 @@
   The client may override this setting when connecting.
   Default value is 65536.
   "
-  [{:keys [allow-connect? tls-str tls-file socket-timeout-ms connect-timeout-ms chunk-size]
+  [{:keys [allow-connect? tls-str socket-timeout-ms connect-timeout-ms chunk-size]
     :or   {socket-timeout-ms  100
            connect-timeout-ms 3000
            chunk-size         65536
-           tls-str            :yasp/none
-           tls-file           :yasp/none}
+           tls-str            :yasp/none}
     :as   cfg}
    {:keys [op] :as data}]
   (assert (map? data) "Expected data to be a map")
@@ -73,17 +73,17 @@
         now-ms (get cfg :now-ms (System/currentTimeMillis))
         shared-cfg {:state      state
                     :now-ms     now-ms
-                    :chunk-size chunk-size}
-        tls-enabled? (not (and (= tls-str :yasp/none) (= tls-file :yasp/none)))]
+                    :chunk-size chunk-size}]
     (assert (instance? IAtom2 state))
     (assert (and (some? allow-connect?)
                  (fn? allow-connect?)) "Expected :allow-connect? to be a function")
     (assert (pos-int? now-ms))
+    (assert (= tls-str :yasp/none))
     (cond (= "ping" op)
           {:res "pong"
-           :tls (str tls-enabled?)}
+           :tls "disabled"}
 
-          (and (= "connect" op) (false? tls-enabled?))
+          (= "connect" op)
           (impl-connect/handle-connect! (assoc shared-cfg
                                           :allow-connect? allow-connect?
                                           :connect-timeout-ms connect-timeout-ms
@@ -91,28 +91,36 @@
                                           :session (get cfg :session (str (random-uuid))))
                                         data)
 
-          (and (= "send" op) (false? tls-enabled?))
+          (= "send" op)
           (impl-send/handle-send! shared-cfg data)
 
-          (and (= "close" op) (false? tls-enabled?))
+          (= "close" op)
           (impl-close/handle-close! shared-cfg data))))
 
 (defn tls-proxy!
   "Do the proxying!
 
-  Same arguments as `proxy!`, but enforces that either
-  `:tls-file` or `:tls-str` is set."
-  [{:keys [tls-str tls-file]
-    :or   {tls-str  :yasp/none
-           tls-file :yasp/none}
+  Same arguments as `proxy!`, but enforces that `:tls-str` is set."
+  [{:keys [tls-str]
+    :or   {tls-str :yasp/none}
     :as   cfg}
    data]
-  (if (and (= tls-str :yasp/none) (= tls-file :yasp/none))
-    (do
-      (log/error "Bad TLS configuration, returning tls-config-error")
-      {:res     "tls-config-error"
-       :payload ":tls-str nor :tls-file is unset"})
-    (proxy! cfg data)))
+  (assert (map? data) "Expected data to be a map")
+  (assert (contains? data :op) "Expected data to contain :op key")
+  (let [op (get data :op)
+        state (get cfg :state default-state)]
+    (assert (instance? IAtom2 state))
+    (impl/assert-valid-op! op)
+    (cond (and (= op "ping") (true? (tls-check/valid-tls-str? tls-str)))
+          {:res "pong"
+           :tls "valid"}
+
+          (and (= op "ping") (false? (tls-check/valid-tls-str? tls-str)))
+          {:res "pong"
+           :tls "invalid"}
+
+          (false? (tls-check/valid-tls-str? tls-str))
+          {:res "tls-config-error"})))
 
 (defn close!
   ([]
