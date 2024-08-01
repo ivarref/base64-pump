@@ -49,9 +49,8 @@
   The client may override this setting when connecting.
   Default value is 65536.
   "
-  [{:keys [allow-connect? tls-str chunk-size]
-    :or   {chunk-size 65536
-           tls-str    :yasp/none}
+  [{:keys [allow-connect? tls-str]
+    :or   {tls-str :yasp/none}
     :as   cfg}
    {:keys [op] :as data}]
   (assert (map? data) "Expected data to be a map")
@@ -59,33 +58,34 @@
   (impl/assert-valid-op! op)
   (let [allow-connect? (impl/allow-connect-to-fn allow-connect?)
         state (get cfg :state default-state)
-        now-ms (get cfg :now-ms (System/currentTimeMillis))
-        shared-cfg {:state      state
-                    :now-ms     now-ms
-                    :chunk-size chunk-size}]
+        now-ms (get cfg :now-ms (System/currentTimeMillis))]
     (assert (instance? IAtom2 state))
     (assert (and (some? allow-connect?)
                  (fn? allow-connect?)) "Expected :allow-connect? to be a function")
     (assert (pos-int? now-ms))
     (assert (= tls-str :yasp/none))
-    (cond (= "ping" op)
-          {:res "pong"
-           :tls "disabled"}
+    (case op
+      "ping"
+      {:res "pong"
+       :tls "disabled"}
 
-          (= "connect" op)
-          (impl-connect/handle-connect! {:state                  state
-                                         :now-ms                 now-ms
-                                         :allow-connect?         allow-connect?
-                                         opts/connect-timeout-ms (get cfg opts/connect-timeout-ms opts/connect-timeout-ms-default)
-                                         opts/socket-timeout-ms  (get cfg opts/socket-timeout-ms opts/socket-timeout-ms-default)
-                                         :session                (get cfg :session (str (random-uuid)))}
-                                        data)
+      "connect"
+      (impl-connect/handle-connect! {:state                  state
+                                     :now-ms                 now-ms
+                                     :allow-connect?         allow-connect?
+                                     opts/connect-timeout-ms (get cfg opts/connect-timeout-ms opts/connect-timeout-ms-default)
+                                     opts/socket-timeout-ms  (get cfg opts/socket-timeout-ms opts/socket-timeout-ms-default)
+                                     :session                (get cfg :session (str (random-uuid)))}
+                                    data)
 
-          (= "send" op)
-          (impl-send/handle-send! shared-cfg data)
+      "send"
+      (impl-send/handle-send! {:state                state
+                               :now-ms               now-ms
+                               opts/chunk-size-bytes opts/chunk-size-bytes-default}
+                              data)
 
-          (= "close" op)
-          (impl-close/handle-close! shared-cfg data))))
+      "close"
+      (impl-close/handle-close! {:state state} data))))
 
 (defn tls-proxy!
   "Do the proxying!
@@ -93,9 +93,8 @@
   Same arguments as `proxy!`, but enforces that `:tls-str` is set.
 
   "
-  [{:keys [tls-str allow-connect? chunk-size]
-    :or   {tls-str    :yasp/none
-           chunk-size 65536}
+  [{:keys [tls-str allow-connect?]
+    :or   {tls-str :yasp/none}
     :as   cfg}
    data]
   (assert (map? data) "Expected data to be a map")
@@ -103,10 +102,7 @@
   (let [op (get data :op)
         state (get cfg :state default-state)
         allow-connect? (impl/allow-connect-to-fn allow-connect?)
-        now-ms (get cfg :now-ms (System/currentTimeMillis))
-        shared-cfg {:state      state
-                    :now-ms     now-ms
-                    :chunk-size chunk-size}]
+        now-ms (get cfg :now-ms (System/currentTimeMillis))]
     (impl/assert-valid-op! op)
     (assert (instance? IAtom2 state))
     (assert (and (some? allow-connect?)

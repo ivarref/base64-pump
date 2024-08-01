@@ -1,17 +1,18 @@
 (ns com.github.ivarref.yasp.impl-send
   (:require [clojure.tools.logging :as log]
+            [com.github.ivarref.yasp.opts :as opts]
             [com.github.ivarref.yasp.utils :as u]
             [com.github.ivarref.yasp.impl-close :as impl-close])
   (:import (clojure.lang IAtom2)
            (java.io BufferedOutputStream InputStream)))
 
-(defn- receive-bytes [{:keys [chunk-size] :as cfg}
+(defn- receive-bytes [cfg
                       {:keys [^InputStream in] :as _session-state}
                       {:keys [session]}]
   (assert (string? session) "Expected :session to be a string")
   (assert (instance? InputStream in))
-  (assert (pos-int? chunk-size))
-  (if-let [read-bytes (u/read-max-bytes in chunk-size)]
+  (assert (pos-int? (get cfg opts/chunk-size-bytes)))
+  (if-let [read-bytes (u/read-max-bytes in (get cfg opts/chunk-size-bytes))]
     (do
       (if (pos-int? (count read-bytes))
         (log/debug "Proxy: Received" (count read-bytes) "bytes from remote")
@@ -29,6 +30,7 @@
   (assert (string? session) "Expected :session to be a string")
   (assert (string? payload) "Expected :payload to be a string")
   (assert (string? hasmore) "Expected :hasmore to be a string")
+  (assert (pos-int? (get cfg opts/chunk-size-bytes)))
   (assert (contains? #{"true" "false"} hasmore))
   (if-let [sess (get-in @state [:sessions session])]
     (let [{:keys [^BufferedOutputStream out]} sess
