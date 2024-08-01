@@ -36,16 +36,6 @@
     (= 22 port))
   This key is required.
 
-  `:tls-str`: a String containing the concatenation of the root CA,
-  the server CA and the server private key.
-  If `nil` or an empty string is given, yasp will assume that
-  the server is misconfigured.
-  If this value is given, yasp will first send the received
-  bytes to a mTLS server. The mTLS server's connection handler
-  will then proxy the decoded bytes to the requested remote.
-  The default value for `:tls-str` is `:yasp/none`, meaning that no mTLS termination
-  will be performed.
-
   `:socket-timeout-ms`: Socket timeout for read operations in milliseconds.
   The client may override this setting when connecting.
    Default value is 100.
@@ -100,7 +90,9 @@
 (defn tls-proxy!
   "Do the proxying!
 
-  Same arguments as `proxy!`, but enforces that `:tls-str` is set."
+  Same arguments as `proxy!`, but enforces that `:tls-str` is set.
+
+  "
   [{:keys [tls-str allow-connect?]
     :or   {tls-str :yasp/none}
     :as   cfg}
@@ -131,4 +123,5 @@
    (close! default-state))
   ([state]
    (impl/close! state)))
+
 
