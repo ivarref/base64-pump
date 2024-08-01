@@ -12,13 +12,13 @@
 (comment (set! *warn-on-reflection* true))
 (declare handle-connect-impl!)
 
-(defn handle-connect! [{:keys [state allow-connect? session connect-timeout-ms now-ms] :as cfg}
+(defn handle-connect! [{:keys [state allow-connect? session now-ms] :as cfg}
                        {:keys [payload]}]
   (assert (instance? IAtom2 state))
   (assert (fn? allow-connect?) (str "Expected allow-connect? to be a fn. Was: " (pr-str allow-connect?)))
   (assert (string? session) "Expected :session to be a string")
   (assert (pos-int? (get cfg opts/socket-timeout-ms)))
-  (assert (pos-int? connect-timeout-ms))
+  (assert (pos-int? (get cfg opts/connect-timeout-ms)))
   (assert (pos-int? now-ms))
   (assert (string? payload) "Expected :payload to be a string")
   (let [{:keys [host port]} (edn/read-string payload)]
@@ -30,12 +30,12 @@
         (log/warn "Returning disallow-connect for" (str host ":" port))
         {:res "disallow-connect"}))))
 
-(defn- handle-connect-impl! [{:keys [state session connect-timeout-ms now-ms] :as cfg}
+(defn- handle-connect-impl! [{:keys [state session now-ms] :as cfg}
                              host port]
   (let [sock (Socket.)]
     (.setSoTimeout sock ^Integer (get cfg opts/socket-timeout-ms))
     (try
-      (.connect sock (InetSocketAddress. ^String host ^Integer port) ^Integer connect-timeout-ms)
+      (.connect sock (InetSocketAddress. ^String host ^Integer port) ^Integer (get cfg opts/connect-timeout-ms))
       (let [in (BufferedInputStream. (.getInputStream sock))
             out (BufferedOutputStream. (.getOutputStream sock))
             session-state {:socket      sock

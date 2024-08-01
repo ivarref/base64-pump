@@ -73,11 +73,12 @@
            :tls "disabled"}
 
           (= "connect" op)
-          (impl-connect/handle-connect! (assoc shared-cfg
-                                          :allow-connect? allow-connect?
-                                          opts/connect-timeout-ms (get cfg opts/connect-timeout-ms opts/connect-timeout-ms-default)
-                                          opts/socket-timeout-ms (get cfg opts/socket-timeout-ms opts/socket-timeout-ms-default)
-                                          :session (get cfg :session (str (random-uuid))))
+          (impl-connect/handle-connect! {:state                  state
+                                         :now-ms                 now-ms
+                                         :allow-connect?         allow-connect?
+                                         opts/connect-timeout-ms (get cfg opts/connect-timeout-ms opts/connect-timeout-ms-default)
+                                         opts/socket-timeout-ms  (get cfg opts/socket-timeout-ms opts/socket-timeout-ms-default)
+                                         :session                (get cfg :session (str (random-uuid)))}
                                         data)
 
           (= "send" op)
@@ -92,10 +93,9 @@
   Same arguments as `proxy!`, but enforces that `:tls-str` is set.
 
   "
-  [{:keys [tls-str allow-connect? connect-timeout-ms chunk-size]
-    :or   {tls-str            :yasp/none
-           connect-timeout-ms 3000
-           chunk-size         65536}
+  [{:keys [tls-str allow-connect? chunk-size]
+    :or   {tls-str    :yasp/none
+           chunk-size 65536}
     :as   cfg}
    data]
   (assert (map? data) "Expected data to be a map")
@@ -118,12 +118,13 @@
         {:res "pong" :tls "valid"}
 
         "connect"
-        (tls-connect/tls-connect! (assoc shared-cfg
-                                    :tls-str tls-str
-                                    :allow-connect? allow-connect?
-                                    opts/connect-timeout-ms (get cfg opts/connect-timeout-ms opts/connect-timeout-ms-default)
-                                    opts/socket-timeout-ms (get cfg opts/socket-timeout-ms opts/socket-timeout-ms-default)
-                                    :session (get cfg :session (str (random-uuid))))
+        (tls-connect/tls-connect! {:state                  state
+                                   :now-ms                 now-ms
+                                   :tls-str                tls-str
+                                   :allow-connect?         allow-connect?
+                                   opts/connect-timeout-ms (get cfg opts/connect-timeout-ms opts/connect-timeout-ms-default)
+                                   opts/socket-timeout-ms  (get cfg opts/socket-timeout-ms opts/socket-timeout-ms-default)
+                                   :session                (get cfg :session (str (random-uuid)))}
                                   data))
       (if (= op "ping")
         {:res "pong" :tls "invalid"}
