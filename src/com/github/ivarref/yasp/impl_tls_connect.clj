@@ -1,5 +1,5 @@
-%^x(ns com.github.ivarref.yasp.impl-tls-connect
-     (:import (clojure.lang IAtom2)))
+(ns com.github.ivarref.yasp.impl-tls-connect
+  (:import (clojure.lang IAtom2)))
 
 (defn handle-tls-connect! [{:keys [state allow-connect? session socket-timeout-ms connect-timeout-ms now-ms] :as cfg} payload]
   (assert (instance? IAtom2 state))
