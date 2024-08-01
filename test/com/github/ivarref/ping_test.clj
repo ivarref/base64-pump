@@ -2,8 +2,9 @@
   (:require [clj-commons.pretty.repl]
             [clojure.string :as str]
             [clojure.test :as t]
+            [com.github.ivarref.locksmith :as locksmith]
             [com.github.ivarref.yasp :as yasp]
-            [com.github.ivarref.locksmith :as locksmith]))
+            [com.github.ivarref.yasp.tls-check :as tls-check]))
 
 (set! *warn-on-reflection* true)
 
@@ -39,7 +40,7 @@
                             {:op "ping"}))))
 
 (comment
-  (time (com.github.ivarref.yasp.tls-check/valid-tls-str? (locksmith/server-keys rand-keys))))
+  (time (tls-check/valid-tls-str? (locksmith/server-keys rand-keys))))
 
 (t/deftest ping-test-bad-keys-2
   (t/is (= {:res "pong"

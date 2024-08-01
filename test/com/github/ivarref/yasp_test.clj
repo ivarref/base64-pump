@@ -6,6 +6,7 @@
     [com.github.ivarref.server :as s]
     [com.github.ivarref.yasp :as yasp]
     [com.github.ivarref.yasp.impl :as impl]
+    [com.github.ivarref.yasp.opts :as opts]
     [com.github.ivarref.yasp.utils :as u])
   (:import (java.io BufferedOutputStream ByteArrayInputStream)
            (java.net Socket)
@@ -70,13 +71,6 @@
 
 (def hello-world-base64 (u/bytes->base64-str hello-world-bytes))
 
-(defn send-and-read! [cfg data read-times]
-  (let [received (atom [])]
-    (yasp/proxy! cfg data)
-    #_(dotimes [_n read-times]
-        (swap! received conj (yasp/proxy! cfg (assoc data :payload ""))))
-    #_@received))
-
 (t/deftest send-test
   (let [st (atom {})]
     (with-open [ss (s/start-server! (atom {}) {} s/echo-handler)]
@@ -134,38 +128,36 @@
 (t/deftest send-eof-test
   (let [st (atom {})]
     (with-open [ss (s/start-server! (atom {}) {} say-hello)]
-      (let [cfg {:state          st
-                 :allow-connect? (impl/allow-connect-to-fn #{{:host "localhost" :port @ss}})
-                 :session        "1"}]
+      (let [cfg {:state                 st
+                 :allow-connect?        (impl/allow-connect-to-fn #{{:host "localhost" :port @ss}})
+                 :session               "1"
+                 opts/socket-timeout-ms 3000}]
         (t/is (= {:res     "ok-connect"
                   :session "1"}
                  (yasp/proxy! cfg
                               {:op      "connect"
                                :payload (u/pr-str-safe {:host "localhost" :port @ss})})))
-        (let [recv (send-and-read!
-                     cfg
-                     {:op      "send"
-                      :session "1"
-                      :payload ""}
-                     10)]
-          (t/is (= 1 (get recv {:res "eof"})))
-          (t/is (= 1 (get recv {:res "ok-send", :payload "SGVsbG8gV29ybGQ="}))))
-
+        (t/is (= {:res "ok-send", :payload "SGVsbG8gV29ybGQ="}
+                 (yasp/proxy! cfg {:op "send" :session "1" :payload "" :hasmore "false"})))
+        (t/is (= {:res "eof"}
+                 (yasp/proxy! cfg {:op "send" :session "1" :payload "" :hasmore "false"})))
         (t/is (= {} (get @st :sessions)))))))
 
 (t/deftest unknown-host-test
-  (let [cfg {:state          (atom {})
-             :allow-connect? (constantly true)
-             :session        "1"}]
+  (let [cfg {:state                  (atom {})
+             :allow-connect?         (constantly true)
+             :session                "1"
+             opts/connect-timeout-ms 100}]
     (t/is (= "connect-error"
              (:res (yasp/proxy! cfg
                                 {:op      "connect"
                                  :payload (u/pr-str-safe {:host "unknown.example.com" :port 12345})}))))))
 
 (t/deftest connect-timeout-test
-  (let [cfg {:state          (atom {})
-             :allow-connect? (constantly true)
-             :session        "1"}]
+  (let [cfg {:state                  (atom {})
+             :allow-connect?         (constantly true)
+             :session                "1"
+             opts/connect-timeout-ms 100}]
     (t/is (= "connect-error"
              (:res (yasp/proxy! cfg
                                 {:op      "connect"

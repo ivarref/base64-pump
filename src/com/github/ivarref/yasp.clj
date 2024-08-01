@@ -1,10 +1,10 @@
 (ns com.github.ivarref.yasp
-  (:require [clojure.tools.logging :as log]
-            [com.github.ivarref.yasp.impl :as impl]
+  (:require [com.github.ivarref.yasp.impl :as impl]
             [com.github.ivarref.yasp.impl-close :as impl-close]
             [com.github.ivarref.yasp.impl-connect :as impl-connect]
             [com.github.ivarref.yasp.impl-send :as impl-send]
             [com.github.ivarref.yasp.impl-tls-connect :as tls-connect]
+            [com.github.ivarref.yasp.opts :as opts]
             [com.github.ivarref.yasp.tls-check :as tls-check])
   (:import (clojure.lang IAtom2)))
 
@@ -49,9 +49,8 @@
   The client may override this setting when connecting.
   Default value is 65536.
   "
-  [{:keys [allow-connect? tls-str socket-timeout-ms connect-timeout-ms chunk-size]
-    :or   {socket-timeout-ms  100
-           connect-timeout-ms 3000
+  [{:keys [allow-connect? tls-str connect-timeout-ms chunk-size]
+    :or   {connect-timeout-ms 3000
            chunk-size         65536
            tls-str            :yasp/none}
     :as   cfg}
@@ -78,7 +77,7 @@
           (impl-connect/handle-connect! (assoc shared-cfg
                                           :allow-connect? allow-connect?
                                           :connect-timeout-ms connect-timeout-ms
-                                          :socket-timeout-ms socket-timeout-ms
+                                          opts/socket-timeout-ms (get cfg opts/socket-timeout-ms opts/socket-timeout-ms-default)
                                           :session (get cfg :session (str (random-uuid))))
                                         data)
 
@@ -94,9 +93,8 @@
   Same arguments as `proxy!`, but enforces that `:tls-str` is set.
 
   "
-  [{:keys [tls-str allow-connect? socket-timeout-ms connect-timeout-ms chunk-size]
+  [{:keys [tls-str allow-connect? connect-timeout-ms chunk-size]
     :or   {tls-str            :yasp/none
-           socket-timeout-ms  100
            connect-timeout-ms 3000
            chunk-size         65536}
     :as   cfg}
@@ -115,26 +113,25 @@
     (assert (and (some? allow-connect?)
                  (fn? allow-connect?)) "Expected :allow-connect? to be a function")
     (assert (pos-int? now-ms))
-    (if (false? (tls-check/valid-tls-str? tls-str))
+    (if (true? (tls-check/valid-tls-str? tls-str))
+      (case op
+        "ping"
+        {:res "pong" :tls "valid"}
+
+        "connect"
+        (tls-connect/tls-connect! (assoc shared-cfg
+                                    :tls-str tls-str
+                                    :allow-connect? allow-connect?
+                                    :connect-timeout-ms connect-timeout-ms
+                                    opts/socket-timeout-ms (get cfg opts/socket-timeout-ms opts/socket-timeout-ms-default)
+                                    :session (get cfg :session (str (random-uuid))))
+                                  data))
       (if (= op "ping")
         {:res "pong" :tls "invalid"}
-        {:res "tls-config-error"})
-      (cond (= op "ping")
-            {:res "pong" :tls "valid"}
-
-            (= op "connect")
-            (tls-connect/handle-tls-connect! (assoc shared-cfg
-                                               :tls-str tls-str
-                                               :allow-connect? allow-connect?
-                                               :connect-timeout-ms connect-timeout-ms
-                                               :socket-timeout-ms socket-timeout-ms
-                                               :session (get cfg :session (str (random-uuid))))
-                                             data)))))
+        {:res "tls-config-error"}))))
 
 (defn close!
   ([]
    (close! default-state))
   ([state]
    (impl/close! state)))
-
-

@@ -2,6 +2,7 @@
   (:require [clojure.edn :as edn]
             [clojure.stacktrace :as st]
             [clojure.tools.logging :as log]
+            [com.github.ivarref.yasp.opts :as opts]
             [com.github.ivarref.yasp.utils :as u])
   (:import (clojure.lang IAtom2)
            (java.io BufferedInputStream BufferedOutputStream)
@@ -11,12 +12,12 @@
 (comment (set! *warn-on-reflection* true))
 (declare handle-connect-impl!)
 
-(defn handle-connect! [{:keys [state allow-connect? session socket-timeout-ms connect-timeout-ms now-ms] :as cfg}
+(defn handle-connect! [{:keys [state allow-connect? session connect-timeout-ms now-ms] :as cfg}
                        {:keys [payload]}]
   (assert (instance? IAtom2 state))
   (assert (fn? allow-connect?) (str "Expected allow-connect? to be a fn. Was: " (pr-str allow-connect?)))
   (assert (string? session) "Expected :session to be a string")
-  (assert (pos-int? socket-timeout-ms))
+  (assert (pos-int? (get cfg opts/socket-timeout-ms)))
   (assert (pos-int? connect-timeout-ms))
   (assert (pos-int? now-ms))
   (assert (string? payload) "Expected :payload to be a string")
@@ -29,10 +30,10 @@
         (log/warn "Returning disallow-connect for" (str host ":" port))
         {:res "disallow-connect"}))))
 
-(defn- handle-connect-impl! [{:keys [state session socket-timeout-ms connect-timeout-ms now-ms]}
+(defn- handle-connect-impl! [{:keys [state session connect-timeout-ms now-ms] :as cfg}
                              host port]
   (let [sock (Socket.)]
-    (.setSoTimeout sock socket-timeout-ms)
+    (.setSoTimeout sock ^Integer (get cfg opts/socket-timeout-ms))
     (try
       (.connect sock (InetSocketAddress. ^String host ^Integer port) ^Integer connect-timeout-ms)
       (let [in (BufferedInputStream. (.getInputStream sock))
