@@ -49,10 +49,9 @@
   The client may override this setting when connecting.
   Default value is 65536.
   "
-  [{:keys [allow-connect? tls-str connect-timeout-ms chunk-size]
-    :or   {connect-timeout-ms 3000
-           chunk-size         65536
-           tls-str            :yasp/none}
+  [{:keys [allow-connect? tls-str chunk-size]
+    :or   {chunk-size 65536
+           tls-str    :yasp/none}
     :as   cfg}
    {:keys [op] :as data}]
   (assert (map? data) "Expected data to be a map")
@@ -76,7 +75,7 @@
           (= "connect" op)
           (impl-connect/handle-connect! (assoc shared-cfg
                                           :allow-connect? allow-connect?
-                                          :connect-timeout-ms connect-timeout-ms
+                                          opts/connect-timeout-ms (get cfg opts/connect-timeout-ms opts/connect-timeout-ms-default)
                                           opts/socket-timeout-ms (get cfg opts/socket-timeout-ms opts/socket-timeout-ms-default)
                                           :session (get cfg :session (str (random-uuid))))
                                         data)
@@ -122,7 +121,7 @@
         (tls-connect/tls-connect! (assoc shared-cfg
                                     :tls-str tls-str
                                     :allow-connect? allow-connect?
-                                    :connect-timeout-ms connect-timeout-ms
+                                    opts/connect-timeout-ms (get cfg opts/connect-timeout-ms opts/connect-timeout-ms-default)
                                     opts/socket-timeout-ms (get cfg opts/socket-timeout-ms opts/socket-timeout-ms-default)
                                     :session (get cfg :session (str (random-uuid))))
                                   data))
