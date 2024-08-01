@@ -74,11 +74,11 @@
 (t/deftest send-test
   (let [st (atom {})]
     (with-open [ss (s/start-server! (atom {}) {} s/echo-handler)]
-      (let [cfg {:state             st
-                 :allow-connect?    #{{:host "localhost" :port @ss}}
-                 :now-ms            1
-                 :session           "1"
-                 :socket-timeout-ms 3000}]
+      (let [cfg {:state                 st
+                 :allow-connect?        #{{:host "localhost" :port @ss}}
+                 :now-ms                1
+                 :session               "1"
+                 opts/socket-timeout-ms 3000}]
         (t/is (= {:res     "ok-connect"
                   :session "1"}
                  (yasp/proxy! cfg {:op      "connect"
@@ -97,11 +97,11 @@
 (t/deftest no-reply-test
   (let [st (atom {})]
     (with-open [ss (s/start-server! (atom {}) {} s/consume-only-handler)]
-      (let [cfg {:state             st
-                 :allow-connect?    #{{:host "localhost" :port @ss}}
-                 :now-ms            1
-                 :session           "1"
-                 :socket-timeout-ms 500}]
+      (let [cfg {:state                 st
+                 :allow-connect?        #{{:host "localhost" :port @ss}}
+                 :now-ms                1
+                 :session               "1"
+                 opts/socket-timeout-ms 100}]
         (t/is (= {:res     "ok-connect"
                   :session "1"}
                  (yasp/proxy! cfg {:op      "connect"
