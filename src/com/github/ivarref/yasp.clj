@@ -4,6 +4,7 @@
             [com.github.ivarref.yasp.impl-close :as impl-close]
             [com.github.ivarref.yasp.impl-connect :as impl-connect]
             [com.github.ivarref.yasp.impl-send :as impl-send]
+            [com.github.ivarref.yasp.impl-tls-connect :as tls-connect]
             [com.github.ivarref.yasp.tls-check :as tls-check])
   (:import (clojure.lang IAtom2)))
 
@@ -93,8 +94,11 @@
   Same arguments as `proxy!`, but enforces that `:tls-str` is set.
 
   "
-  [{:keys [tls-str allow-connect?]
-    :or   {tls-str :yasp/none}
+  [{:keys [tls-str allow-connect? socket-timeout-ms connect-timeout-ms chunk-size]
+    :or   {tls-str            :yasp/none
+           socket-timeout-ms  100
+           connect-timeout-ms 3000
+           chunk-size         65536}
     :as   cfg}
    data]
   (assert (map? data) "Expected data to be a map")
@@ -102,12 +106,15 @@
   (let [op (get data :op)
         state (get cfg :state default-state)
         allow-connect? (impl/allow-connect-to-fn allow-connect?)
-        now-ms (get cfg :now-ms (System/currentTimeMillis))]
+        now-ms (get cfg :now-ms (System/currentTimeMillis))
+        shared-cfg {:state      state
+                    :now-ms     now-ms
+                    :chunk-size chunk-size}]
+    (impl/assert-valid-op! op)
     (assert (instance? IAtom2 state))
     (assert (and (some? allow-connect?)
                  (fn? allow-connect?)) "Expected :allow-connect? to be a function")
     (assert (pos-int? now-ms))
-    (impl/assert-valid-op! op)
     (if (false? (tls-check/valid-tls-str? tls-str))
       (if (= op "ping")
         {:res "pong" :tls "invalid"}
@@ -116,7 +123,13 @@
             {:res "pong" :tls "valid"}
 
             (= op "connect")
-            :todo/todo))))
+            (tls-connect/handle-tls-connect! (assoc shared-cfg
+                                               :tls-str tls-str
+                                               :allow-connect? allow-connect?
+                                               :connect-timeout-ms connect-timeout-ms
+                                               :socket-timeout-ms socket-timeout-ms
+                                               :session (get cfg :session (str (random-uuid))))
+                                             data)))))
 
 (defn close!
   ([]
