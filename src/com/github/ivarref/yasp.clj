@@ -101,26 +101,30 @@
   "Do the proxying!
 
   Same arguments as `proxy!`, but enforces that `:tls-str` is set."
-  [{:keys [tls-str]
+  [{:keys [tls-str allow-connect?]
     :or   {tls-str :yasp/none}
     :as   cfg}
    data]
   (assert (map? data) "Expected data to be a map")
   (assert (contains? data :op) "Expected data to contain :op key")
   (let [op (get data :op)
-        state (get cfg :state default-state)]
+        state (get cfg :state default-state)
+        allow-connect? (impl/allow-connect-to-fn allow-connect?)
+        now-ms (get cfg :now-ms (System/currentTimeMillis))]
     (assert (instance? IAtom2 state))
+    (assert (and (some? allow-connect?)
+                 (fn? allow-connect?)) "Expected :allow-connect? to be a function")
+    (assert (pos-int? now-ms))
     (impl/assert-valid-op! op)
-    (cond (and (= op "ping") (true? (tls-check/valid-tls-str? tls-str)))
-          {:res "pong"
-           :tls "valid"}
+    (if (false? (tls-check/valid-tls-str? tls-str))
+      (if (= op "ping")
+        {:res "pong" :tls "invalid"}
+        {:res "tls-config-error"})
+      (cond (= op "ping")
+            {:res "pong" :tls "valid"}
 
-          (and (= op "ping") (false? (tls-check/valid-tls-str? tls-str)))
-          {:res "pong"
-           :tls "invalid"}
-
-          (false? (tls-check/valid-tls-str? tls-str))
-          {:res "tls-config-error"})))
+            (= op "connect")
+            :todo/todo))))
 
 (defn close!
   ([]
