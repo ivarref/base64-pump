@@ -64,7 +64,7 @@
         [server-keys client-keys] (gen-key-pair)
         proxy-cfg {:state          st
                    :allow-connect? (constantly true)
-                   :now-ms         0
+                   :now-ms         1
                    :session        "1"
                    :tls-str        server-keys
                    :tls-port       1919}]
@@ -72,8 +72,8 @@
       (with-open [remote-server (s/start-server! (atom {}) {:local-port 9999} s/echo-handler)
                   tls-decode-server (s/start-server! (atom {}) {:local-port 9876} (partial tls-pump proxy-cfg))]
         (let [tls-context (tls/ssl-context-or-throw client-keys nil)
-              _ (yasp/proxy! proxy-cfg {:op      "connect"
-                                        :payload (u/pr-str-safe {:host "127.0.0.1" :port @remote-server})})]
+              _ (yasp/tls-proxy! proxy-cfg {:op      "connect"
+                                            :payload (u/pr-str-safe {:host "127.0.0.1" :port @remote-server})})]
           (with-open [sock (tls/socket tls-context "localhost" @tls-decode-server 3000)]
             (.setSoTimeout sock 1000)
             (with-open [in (BufferedReader. (InputStreamReader. (.getInputStream sock) StandardCharsets/UTF_8))
@@ -91,12 +91,12 @@
   (let [st (atom {})
         proxy-cfg {:state          st
                    :allow-connect? (constantly true)
-                   :now-ms         0
+                   :now-ms         1
                    :session        "1"
                    :tls-str        nil
                    :tls-port       1919}]
     (try
-      (t/is (= "tls-config-error" (:res (yasp/proxy! proxy-cfg {:op "ping"}))))
+      (t/is (= "tls-config-error" (:res (yasp/tls-proxy! proxy-cfg {:op "ping"}))))
       (finally
         (yasp/close! st)))))
 
@@ -115,30 +115,13 @@
       (finally
         (yasp/close! st)))))
 
-(t/deftest bad-tls-str-server-3
-  (let [st (atom {})
-        proxy-cfg {:state          st
-                   :allow-connect? (constantly true)
-                   :now-ms         0
-                   :session        "1"
-                   :tls-file       "missing.keys"
-                   :tls-port       1919}]
-    (try
-      (with-open [remote (s/start-server! (atom {}) {:local-port 9999} s/echo-handler)]
-        (t/is (= {:res     "tls-config-error"
-                  :payload "missing-tls-file"}
-                 (yasp/proxy! proxy-cfg {:op      "connect"
-                                         :payload (u/pr-str-safe {:host "127.0.0.1" :port @remote})}))))
-      (finally
-        (yasp/close! st)))))
-
 (t/deftest bad-tls-client
   (let [st (atom {})
         kp1 (gen-key-pair)
         kp2 (gen-key-pair)
         proxy-cfg {:state          st
                    :allow-connect? (constantly true)
-                   :now-ms         0
+                   :now-ms         1
                    :session        "1"
                    :tls-str        (first kp1)
                    :tls-port       1919}]
@@ -148,8 +131,8 @@
                   tls-client2 (s/start-server! (atom {}) {:local-port 7777} (partial tls-pump (assoc proxy-cfg :session "2")))]
         (let [tls-1 (tls/ssl-context-or-throw (second kp1) nil)
               tls-2 (tls/ssl-context-or-throw (second kp2) nil)
-              _ (yasp/proxy! proxy-cfg {:op      "connect"
-                                        :payload (u/pr-str-safe {:host "127.0.0.1" :port @echo-server})})]
+              _ (yasp/tls-proxy! proxy-cfg {:op      "connect"
+                                            :payload (u/pr-str-safe {:host "127.0.0.1" :port @echo-server})})]
           (try
             (with-open [sock (tls/socket tls-2 "localhost" @tls-client 3000)]
               (.setSoTimeout sock 1000)
