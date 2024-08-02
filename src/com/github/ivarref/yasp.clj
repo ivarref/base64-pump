@@ -60,8 +60,7 @@
         state (get cfg :state default-state)
         now-ms (get cfg :now-ms (System/currentTimeMillis))]
     (assert (instance? IAtom2 state))
-    (assert (and (some? allow-connect?)
-                 (fn? allow-connect?)) "Expected :allow-connect? to be a function")
+    (assert (fn? allow-connect?) "Expected :allow-connect? to be a function")
     (assert (pos-int? now-ms))
     (assert (= tls-str :yasp/none))
     (case op
@@ -105,10 +104,10 @@
         now-ms (get cfg :now-ms (System/currentTimeMillis))]
     (impl/assert-valid-op! op)
     (assert (instance? IAtom2 state))
-    (assert (and (some? allow-connect?)
-                 (fn? allow-connect?)) "Expected :allow-connect? to be a function")
+    (assert (fn? allow-connect?) "Expected :allow-connect? to be a function")
     (assert (pos-int? now-ms))
-    (if (true? (tls-check/valid-tls-str? tls-str))
+    (if (false? (tls-check/valid-tls-str? tls-str))
+      {:res "tls-config-error"}
       (case op
         "ping"
         {:res "pong" :tls "valid"}
@@ -121,10 +120,7 @@
                                    opts/connect-timeout-ms (get cfg opts/connect-timeout-ms opts/connect-timeout-ms-default)
                                    opts/socket-timeout-ms  (get cfg opts/socket-timeout-ms opts/socket-timeout-ms-default)
                                    :session                (get cfg :session (str (random-uuid)))}
-                                  data))
-      (if (= op "ping")
-        {:res "pong" :tls "invalid"}
-        {:res "tls-config-error"}))))
+                                  data)))))
 
 (defn close!
   ([]
