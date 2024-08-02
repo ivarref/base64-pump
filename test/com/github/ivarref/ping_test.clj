@@ -32,8 +32,7 @@
       (str/replace "," "\n")))
 
 (t/deftest ping-test-bad-keys
-  (t/is (= {:res "pong"
-            :tls "invalid"}
+  (t/is (= {:res "tls-config-error"}
            (yasp/tls-proxy! {:state          (atom {})
                              :allow-connect? (fn [_] true)
                              :tls-str        bad-server-keys}
@@ -43,8 +42,7 @@
   (time (tls-check/valid-tls-str? (locksmith/server-keys rand-keys))))
 
 (t/deftest ping-test-bad-keys-2
-  (t/is (= {:res "pong"
-            :tls "invalid"}
+  (t/is (= {:res "tls-config-error"}
            (yasp/tls-proxy! {:state          (atom {})
                              :allow-connect? (fn [_] true)}
                             {:op "ping"}))))

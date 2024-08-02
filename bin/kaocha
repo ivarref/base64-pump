@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+clojure -M:test:kaocha --watch --fail-fast "$@"

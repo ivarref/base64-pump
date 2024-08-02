@@ -1,0 +1,5 @@
+#kaocha/v1
+        {:kaocha/bindings       {kaocha.stacktrace/*stacktrace-filters*   ["clojure.core" "clojure.core"]
+                                 kaocha.stacktrace/*stacktrace-stop-list* ["kaocha"
+                                                                           "clojure"]}}
+

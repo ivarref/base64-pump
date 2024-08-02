@@ -198,7 +198,7 @@
         kp1 (gen-key-pair)
         proxy-cfg {:state          st
                    :allow-connect? (constantly true)
-                   :now-ms         0
+                   :now-ms         1
                    :session        "1"
                    :tls-str        (first kp1)
                    :tls-port       1919}]
