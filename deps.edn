@@ -6,7 +6,7 @@
            {:extra-paths ["test" "test-resources"]
             :extra-deps  {io.github.cognitect-labs/test-runner {:git/tag "v0.5.1" :git/sha "dfb30dd"}
                           org.clj-commons/pretty               {:mvn/version "2.2"}
-                          com.github.ivarref/locksmith         {:git/sha "9e0deee6fe7e9b0152fb7ac417afe3b754cc2d41"}
+                          com.github.ivarref/locksmith         {:git/sha "3f53e97b7a3cf65170a70a4d0b6885f8d6cbfc70"}
                           org.slf4j/slf4j-simple               {:mvn/version "2.0.9"}
                           aleph/aleph                          {:mvn/version "0.8.1"}
                           cheshire/cheshire                    {:mvn/version "5.12.0"}}
