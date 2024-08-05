@@ -1,6 +1,9 @@
 (ns com.github.ivarref.kaocha-hook
   (:require [kaocha.output :as output])
-  (:import (java.util Date)))
+  (:import (java.time LocalDateTime)
+           (java.time.format DateTimeFormatter)))
+
+(def formatter (DateTimeFormatter/ofPattern "HH:mm:ss"))
 
 (defn clear-screen! []
   (.print System/out "\033[H\033[2J")
@@ -8,6 +11,7 @@
 
 (defn clear-screen [test test-plan]
   (clear-screen!)
+  (println "Testing" (.format formatter (LocalDateTime/now)))
   test)
 
 #_(defn pre-test [test test-plan]

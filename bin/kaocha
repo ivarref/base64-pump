@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
 
 printf "\nLaunching kaocha ...\n"
-clojure -M:test:kaocha --watch --fail-fast --seed 976443533 --reporter documentation "$@"
-
-
+clojure -M:test:kaocha --watch --fail-fast --seed 976443533 --reporter dots "$@"
