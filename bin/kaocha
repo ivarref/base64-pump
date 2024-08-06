@@ -1,4 +1,11 @@
 #!/usr/bin/env bash
 
-printf "\nLaunching kaocha ...\n"
-clojure -M:test:kaocha --watch --fail-fast --seed 976443533 --no-capture-output --reporter com.github.ivarref.reporter/dots "$@"
+printf "\033c"
+printf "Launching kaocha ...\n"
+clojure -M:test:kaocha \
+        --watch \
+        --fail-fast \
+        --seed 976443533 \
+        --no-capture-output \
+        --reporter com.github.ivarref.reporter/dots \
+        "$@"
