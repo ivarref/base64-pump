@@ -58,7 +58,7 @@
   (first (rows-cols)))
 
 (def save-cursor "\0337")
-(def restore-cursor "\0337")
+(def restore-cursor "\0338")
 (def up-one-line "\033[1A")
 
 (defn reserve-line [line]
@@ -66,22 +66,39 @@
        line
        "r"))
 
+(defn reserve-bottom-line []
+  (reserve-line (dec (line-count))))
+
+(defn unreserve-bottom-line []
+  (reserve-line (line-count)))
+
+(defn bottom-line [s]
+  (str save-cursor
+       (unreserve-bottom-line)
+       (str "\033[" (line-count) ";0f") ; Move cursor to the bottom margin
+       s ; actual line...
+       (str "\033[0K") ; clear to end of line
+       (reserve-bottom-line)
+       restore-cursor))
+
+(defn print-bottom-line! [s]
+  (print (bottom-line s))
+  (flush))
+
 (defmethod dots* :kaocha/begin-suite [_]
   (t/with-test-out
-    (print (str "\n" ; ensure last line is available
-                save-cursor
-                (reserve-line (dec (line-count)))
+    (println "") ; ensure last line is available
+    (flush)
+    (print (str save-cursor
+                (reserve-bottom-line)
                 restore-cursor
                 up-one-line))
     (flush)
-    (println "begin-suite")
-    (print "[")
-    (flush)))
+    (print-bottom-line! "[")))
 
 (defmethod dots* :kaocha/end-suite [_]
   (t/with-test-out
-    (print "]")
-    (flush)))
+    (print-bottom-line! "[]")))
 
 (defmethod dots* :summary [_]
   (t/with-test-out

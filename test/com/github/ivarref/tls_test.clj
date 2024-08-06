@@ -71,7 +71,7 @@
     (try
       (with-open [remote-server (s/start-server! (atom {}) {:local-port 9999} s/echo-handler)]
         ;tls-decode-server (s/start-server! (atom {}) {:local-port 9876} (partial tls-pump proxy-cfg))]
-        (println "wtf...??")
+        #_(println "wtf...??")
         (t/is (= 1 3))
         (yasp/tls-proxy! proxy-cfg {:op      "connect"
                                     :payload (u/pr-str-safe {:host "127.0.0.1" :port @remote-server})}

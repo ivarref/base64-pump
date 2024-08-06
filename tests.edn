@@ -1,6 +1,6 @@
 #kaocha/v1
         {:plugins [:kaocha.plugin/hooks]
-         :tests [{:id :unit :kaocha.hooks/before [com.github.ivarref.kaocha-hook/clear-screen]}]
+         ;:tests [{:id :unit :kaocha.hooks/before [com.github.ivarref.kaocha-hook/clear-screen]}]
          ;:kaocha.hooks/pre-test com.github.ivarref.kaocha-hook/pre-test
          ;:kaocha.hooks/post-test com.github.ivarref.kaocha-hook/post-test
          :kaocha/bindings {kaocha.stacktrace/*stacktrace-filters*   ["clojure.core" "sun" "java"]

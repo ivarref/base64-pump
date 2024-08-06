@@ -6,12 +6,12 @@
 (def formatter (DateTimeFormatter/ofPattern "HH:mm:ss"))
 
 (defn clear-screen! []
-  (.print System/out "\033[H\033[2J")
+  (.print System/out "\033c") ;[H\033[2J")
   (.flush System/out))
 
 (defn clear-screen [test test-plan]
-  (clear-screen!)
-  (println "Testing" (.format formatter (LocalDateTime/now)))
+  #_(clear-screen!)
+  #_(println "Testing" (.format formatter (LocalDateTime/now)))
   test)
 
 #_(defn pre-test [test test-plan]
