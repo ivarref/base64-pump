@@ -7,3 +7,4 @@ target/
 aleph-example/.yasp-port
 aleph-example/client.keys
 aleph-example/server.keys
+*.clj~

@@ -1,8 +1,10 @@
 #kaocha/v1
-        {:plugins [:kaocha.plugin/hooks]
+        {;:plugins [:kaocha.plugin/hooks]
          ;:tests [{:id :unit :kaocha.hooks/before [com.github.ivarref.kaocha-hook/clear-screen]}]
          ;:kaocha.hooks/pre-test com.github.ivarref.kaocha-hook/pre-test
          ;:kaocha.hooks/post-test com.github.ivarref.kaocha-hook/post-test
+         ;:kaocha.watch/use-ignore-file true
+         :kaocha.watch/ignore [".idea/*" "*.clj~"]
          :kaocha/bindings {kaocha.stacktrace/*stacktrace-filters*   ["clojure.core" "sun" "java"]
                            kaocha.stacktrace/*stacktrace-stop-list* ["kaocha"
                                                                      "clojure"]}}
