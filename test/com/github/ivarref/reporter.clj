@@ -2,8 +2,8 @@
   (:require [clojure.string :as str]
             [clojure.test :as t]
             [kaocha.hierarchy :as hierarchy]
-            [kaocha.output :as output])
-  (:import (java.io BufferedReader InputStreamReader)))
+            [com.github.ivarref.bottom-line :as bl]
+            [kaocha.output :as output]))
 
 (defmulti result :type :hierarchy #'hierarchy/hierarchy)
 (defmethod result :default [_])
@@ -13,92 +13,42 @@
 
 (defmethod dots* :pass [_]
   (t/with-test-out
-    (print ".")
-    (flush)))
+    (bl/print-bottom-line-continuous! "." #_(output/colored :green "."))))
 
 (defmethod dots* :kaocha/fail-type [_]
   (t/with-test-out
-    (print (output/colored :red "F"))
-    (flush)))
+    (bl/print-bottom-line-continuous! (output/colored :red "F"))))
 
 (defmethod dots* :error [_]
   (t/with-test-out
-    (print (output/colored :red "E"))
-    (flush)))
+    (bl/print-bottom-line-continuous! (output/colored :red "E"))))
 
 (defmethod dots* :kaocha/pending [_]
   (t/with-test-out
-    (print (output/colored :yellow "P"))
-    (flush)))
+    (bl/print-bottom-line-continuous! (output/colored :yellow "P"))))
 
 (defmethod dots* :kaocha/begin-group [_]
   (t/with-test-out
-    (print "(")
-    (flush)))
+    (bl/print-bottom-line-continuous! "(")))
 
 (defmethod dots* :kaocha/end-group [_]
   (t/with-test-out
-    (print ")")
-    (flush)))
+    (bl/print-bottom-line-continuous! ")")))
 
-(defn rows-cols []
-  (let [^ProcessBuilder processbuilder (ProcessBuilder. ["sh" "-c" "stty size < /dev/tty"])
-        ^Process process (.start processbuilder)
-        line (atom nil)]
-    (with-open [^BufferedReader reader (BufferedReader. (InputStreamReader. (.getInputStream process)))]
-      (reset! line (.readLine reader)))
-    (.waitFor process)
-    (assert (= 0 (.exitValue process)))
-    (let [line-str @line
-          [rows cols] (str/split line-str #" ")]
-      [(Integer/parseInt rows)
-       (Integer/parseInt cols)])))
+(def run-count (atom 0))
 
-(defn line-count []
-  (first (rows-cols)))
-
-(def save-cursor "\0337")
-(def restore-cursor "\0338")
-(def up-one-line "\033[1A")
-
-(defn reserve-line [line]
-  (str "\033[0;"
-       line
-       "r"))
-
-(defn reserve-bottom-line []
-  (reserve-line (dec (line-count))))
-
-(defn unreserve-bottom-line []
-  (reserve-line (line-count)))
-
-(defn bottom-line [s]
-  (str save-cursor
-       (unreserve-bottom-line)
-       (str "\033[" (line-count) ";0f") ; Move cursor to the bottom margin
-       s ; actual line...
-       (str "\033[0K") ; clear to end of line
-       (reserve-bottom-line)
-       restore-cursor))
-
-(defn print-bottom-line! [s]
-  (print (bottom-line s))
-  (flush))
+(defn dashes [n]
+  (str/join "-" (mapv (constantly "") (range n))))
 
 (defmethod dots* :kaocha/begin-suite [_]
   (t/with-test-out
-    (println "") ; ensure last line is available
-    (flush)
-    (print (str save-cursor
-                (reserve-bottom-line)
-                restore-cursor
-                up-one-line))
-    (flush)
-    (print-bottom-line! "[")))
+    (bl/init!)
+    (bl/print-bottom-line-continuous! "[")
+    (println (dashes 40) (swap! run-count inc) (dashes 40))))
 
 (defmethod dots* :kaocha/end-suite [_]
   (t/with-test-out
-    (print-bottom-line! "[]")))
+    (bl/print-bottom-line-continuous! "]")))
 
 (defmethod dots* :summary [_]
   (t/with-test-out
