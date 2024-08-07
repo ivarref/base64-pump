@@ -1,0 +1,6 @@
+./bin/kaocha
+tests.edn
+test/com/github/ivarref/kaocha_hook.clj
+test/com/github/ivarref/reporter.clj
+deps.edn
+/home/ire/code2/kaocha/src/kaocha/watch.clj
